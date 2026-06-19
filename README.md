@@ -62,8 +62,8 @@ El agente C escucha en un único puerto TCP:
 
 ```bash
 # Clonar el repositorio
-git clone <URL_DEL_REPO>
-cd <nombre-del-repo>
+git clone https://github.com/Alan2255/SistemasOperativos1TPFinal
+cd SistemasOperativos1TPFinal
 
 # Compilar el agente C
 make
@@ -219,13 +219,16 @@ chmod +x test_deadlock.sh
 
 ## Diagrama de secuencia
 
-Los diagramas se encuentran en `/docs/diagrams/`:
+Los diagramas se encuentran en `diagramas`:
 
-| Archivo | Caso |
-|---------|------|
-| `caso1_job_exitoso.drawio` | Job exitoso: Erlang solicita recursos, agente los concede en todos los nodos |
-| `caso2_job_denegado.drawio` | Job denegado: un nodo no tiene recursos suficientes |
-| `caso3_deadlock.drawio` | Escenario de deadlock y su resolución *(pendiente)* |
+### Caso 1 — Job exitoso
+![Caso 1](diagrams/caso1_job_exitoso.drawio.png)
+
+### Caso 2 — Job denegado
+![Caso 2](diagrams/caso2_job_denegado.drawio.png)
+
+### Caso 3 — Deadlock y resolución
+> ⚠️ Pendiente hasta definir estrategia anti-deadlock con Rol 3.
 
 ---
 
