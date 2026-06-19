@@ -222,10 +222,10 @@ chmod +x test_deadlock.sh
 Los diagramas se encuentran en `diagramas`:
 
 ### Caso 1 — Job exitoso
-![Caso 1](diagrams/caso1_job_exitoso.drawio.png)
+![Caso 1](SistemasOperativos1TPFinal/blob/main/diagramas/caso1_job_exitoso.drawio.png)
 
 ### Caso 2 — Job denegado
-![Caso 2](diagrams/caso2_job_denegado.drawio.png)
+![Caso 2](SistemasOperativos1TPFinal/blob/main/diagramas/caso2_job_denegado.drawio.png)
 
 ### Caso 3 — Deadlock y resolución
 > ⚠️ Pendiente hasta definir estrategia anti-deadlock con Rol 3.
