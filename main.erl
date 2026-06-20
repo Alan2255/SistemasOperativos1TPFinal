@@ -1,20 +1,20 @@
 -module(main).
--export([]).
+-export([server/1, client/1, generate_jobs/3, scheduler_jobs/3, handler_job/7, wait_jobs/1]).
 %nodos = host 
 
 obtener_cant_maxima_recursos([], ListMaximos) ->
-    ListMaximos.
+    ListMaximos;
 
 %Cada elem de la lista es un nodo
 obtener_cant_maxima_recursos([Nodo | Resto], ListMaximos) ->
     List_recursos = string:tokens(Nodo, ":"), %devuelve una lista con cda elem del nodo, ej [host, puerto, cpu, cntcpu, mem, cntmem, etc
     [MaxCPU, MaxMEM, MaxGPU] = ListMaximos,
     case List_recursos of 
-        [_Host, ask_for_resourcesPuerto, "cpu", CantCPU,  "mem", CantMEM, "gpu", CantGPU] -> 
+        [_Host, _Puerto , "cpu", CantCPU,  "mem", CantMEM, "gpu", CantGPU] -> 
             SumaCPU = MaxCPU + list_to_integer(CantCPU),
             SumaMEM = MaxMEM + list_to_integer(CantMEM),
             SumaGPU = MaxGPU + list_to_integer(CantGPU),
-            obtener_cant_maxima_recursos(Resto, [SumaCPU, SumaMEM, SumaGPU])
+            obtener_cant_maxima_recursos(Resto, [SumaCPU, SumaMEM, SumaGPU]);
 
         _ ->
             %si no pudo asignar es pq esta mal el nodo
@@ -33,13 +33,14 @@ eliminar_indice(N, Lista) ->
 %generar trabajo el cual necesitara tantos recursos, ==== dentro de ask_for_resources =====
 % %JobID comienza de 0, N es la cantidad de jobs q pedimos generar, es recursiva
 %Una vez genere el job, le mandara un msg a ask_for_resources con el IDjob y el job para que se comunique con el agente C para pedir recursos
-generate_jobs(Pid, 0, ListMaximos) -> %% cuando N es 0, termina
-        ok.
+generate_jobs(_Pid, 0, _ListMaximos) -> %% cuando N es 0, termina
+        ok;
 
 %Armas el job con el job id y la cantidd de recursos q vas a pedir, a que nodo se lo pedira lo manejara el scheduler
 generate_jobs(Pid, N, ListMaximos) ->
     [MaxCPU, MaxMEM, MaxGPU] = ListMaximos,
-    JobID = erlang:unique_integer(), %genera un entero unico en toda la instancia actual del sistema(maq virtual BEAM)
+    JobID_int = erlang:unique_integer(), %genera un entero unico en toda la instancia actual del sistema(maq virtual BEAM)
+    JobID = integer_to_list(JobID_int),
     ListRecursos = ["cpu", "mem", "gpu"],
 
     Eleccion_recursos = rand:uniform(3), %random entre 1 y N (inclusive), elije cuantos recursos va a pedir
@@ -56,7 +57,7 @@ generate_jobs(Pid, N, ListMaximos) ->
         2 ->    
             Indice_ignorar = rand:uniform(3),
             Recurso_ignorar = lists:nth(Indice_ignorar, ListRecursos),
-            Cantidad_ignorar = lists:nth(Indice_ignorar, ListMaximos),
+
             Recursos_elegidos = [R || R <- ListRecursos, R =/= Recurso_ignorar], %devuelve una lista sin el recurso ignorado
             Cant_elegidas = eliminar_indice(Indice_ignorar, ListMaximos), %lo hacemos asi pq de otra maner apodrias tener misma cant y no saber cual eliminar
 
@@ -65,22 +66,22 @@ generate_jobs(Pid, N, ListMaximos) ->
             Cantidad1 = integer_to_list(rand:uniform(Cant1)),
             Cantidad2 = integer_to_list(rand:uniform(Cant2)),
             
-            Job = Recurso1 ++ ":" ++ Cantidad1 ++ ":" Recurso2 ++ ":" ++ Cantidad2
+            Job = Recurso1 ++ ":" ++ Cantidad1 ++ ":" ++ Recurso2 ++ ":" ++ Cantidad2,
             Pid ! {JobID, Job, 2};
 
         3 ->
             Recurso1 = "cpu",
             Cantidad1 = integer_to_list(rand:uniform(MaxCPU)),%Cant random del recurso elegido de 1 hasta lo max q pueda pedir
 
-            Recurso2 = "mem"
+            Recurso2 = "mem",
             Cantidad2 = integer_to_list(rand:uniform(MaxMEM)),
 
             Recurso3 = "gpu",
             Cantidad3 = integer_to_list(rand:uniform(MaxGPU)),
 
-            Job = Recurso1 ++ ":" ++ Cantidad1 ++ ":" Recurso2 ++ ":" ++ Cantidad2 ++ ":" ++  Recurso3 ++ ":" ++ Cantidad3
-            Pid ! {JobID, Job, 3},
-        end
+            Job = Recurso1 ++ ":" ++ Cantidad1 ++ ":" ++ Recurso2 ++ ":" ++ Cantidad2 ++ ":" ++  Recurso3 ++ ":" ++ Cantidad3,
+            Pid ! {JobID, Job, 3}
+        end,
     generate_jobs(Pid, N-1, ListMaximos).
         
 
@@ -93,7 +94,6 @@ parsear_un_nodo(Nodo) ->   % string:toekns ":" , devuelve una lista con cda elem
 % entonces podemos acceder a nodo tal y a la cant de su cpu,mem, gpu
 parsear_lista_nodos(ListNodos) ->
     maps:from_list([parsear_un_nodo(Nodo) || Nodo <- ListNodos]).
-
 
 
 %Si coinciden las 2 clausas por ej 0 y [] erlang toma la primera q concide asi q devolveria []
@@ -115,8 +115,6 @@ repartir_entre_nodos(Indice, CantidadRestante, [{Host, Recursos} | Resto]) ->
             Tomar = min(Disponible, CantidadRestante),%El minimo entre cant q queres o la cantidad disponible, para no sobrepasarte
             [{Host, Tomar} | repartir_entre_nodos(Indice, CantidadRestante - Tomar, Resto)]%Agrega el elem a la lista y llama recursivamente restando lo tomado de la cantidad
     end.    
-
-
 
 
 %En el case busca en el mapa de nodos el primer nodo q tenga suficiente recurso segun el tipo de recurso pedido y su cant requerida
@@ -144,28 +142,28 @@ elegir_nodos(Recurso, Cantidad, MapNodos) ->
 % Te devuelve el msg armado con el job, solo faltaria agregarle el JobID.
 armar_msg(Recurso, Cant, MapNodos) ->
     ListNodoCantidad = elegir_nodos(Recurso, list_to_integer(Cant), MapNodos), %devuelve la lista de tuplas [{Nodo1, CantidadTomada}, {Nodo2, CantidadTomada2} 
-    ListPedidoPorNodo = ["@" ++ Nodo ++ ":" ++ Recurso1 ++ ":" ++ integer_to_list(Cant) || {Nodo, Cant} <- ListNodoCantidad ],%A cada elem de la lista, le aplica eso
+    ListPedidoPorNodo = ["@" ++ Nodo ++ ":" ++ Recurso ++ ":" ++ integer_to_list(Cantidad) || {Nodo, Cantidad} <- ListNodoCantidad ],%A cada elem de la lista, le aplica eso
     %Devuelve una lista con ["@Nodo:Recurso:Cant", "@Nodo:Recurso:Cant", etc]
     string:join(ListPedidoPorNodo, " "). %Arma un string donde separa cada elem de la lista con un " ", EJ: @Nodo:Recurso:Cant @Nodo:Recurso:Cant etc
   
     
 handler_msgs(JobID, Job, CantRecursos, MapNodos) ->
             List_recursos = string:tokens(Job, ":"),%transforma el string job a ["recurso", "cant", "recurso", "cant"], max puede haber 3 elementos con el recurso y la cant q quiere.
-            Case CantRecursos of 
+            case CantRecursos of 
                 1 ->
                     [Recurso1, Cant1] = List_recursos, %Sabemos q es un solo recurso, hacemos pattern matching con sus elementos
                     Msg = armar_msg(Recurso1, Cant1, MapNodos),
 
-                    Msg_final = "JOB_REQUEST" ++ JobID ++ Msg;  %Ahora queda JobID @Nodo:Recurso:Cant @Nodo:Recurso:Cant etc
-                    {JobID, Job, Msg_final}
+                    Msg_final = "JOB_REQUEST" ++ " " ++ JobID ++ Msg, %Ahora queda JobID @Nodo:Recurso:Cant @Nodo:Recurso:Cant etc
+                    {JobID, Job, Msg_final};
 
                 2 ->
                     [Recurso1, Cant1, Recurso2, Cant2] = List_recursos, 
                     Msg1 = armar_msg(Recurso1, Cant1, MapNodos), %Msg con el recurso que queremos, pedido entre el/los nodo/nodos disponibles
                     Msg2 = armar_msg(Recurso2, Cant2, MapNodos),
 
-                    Msg_final = "JOB_REQUEST" ++ JobID ++ Msg1 ++ Msg2;
-                    {JobID, Job, Msg_final}
+                    Msg_final = "JOB_REQUEST" ++ " " ++ JobID ++ Msg1 ++ Msg2,
+                    {JobID, Job, Msg_final};
 
                 3 ->
                     [Recurso1, Cant1, Recurso2, Cant2, Recurso3, Cant3] = List_recursos, 
@@ -174,84 +172,101 @@ handler_msgs(JobID, Job, CantRecursos, MapNodos) ->
                     Msg2 = armar_msg(Recurso2, Cant2, MapNodos),
                     Msg3 = armar_msg(Recurso3, Cant3, MapNodos),
 
-                    Msg_final = "JOB_REQUEST" ++ JobID, ++ Msg1 ++ Msg2 ++ Msg3,
+                    Msg_final = "JOB_REQUEST" ++ " " ++ JobID ++ Msg1 ++ Msg2 ++ Msg3,
                     {JobID, Job, Msg_final}
             end.
 
+%Si no existe lo crea y sino escribe al final
+registrar_log(JobID, Job, Msg_resultado)->
+    {{Y,M,D}, {H,Mi,S}} = calendar:local_time(), %obtiene la fecha 
+    Linea = io_lib:format("~p-~p-~p ~p:~p:~p | Job ~p | ~s | ~s~n", [Y, M, D, H, Mi, S, JobID, Job, Msg_resultado]), %Devuelve un string para usarlo, a dif de io:format que imprime directo en la consola
+    file:write_file("scheduler.log", Linea , [append]). %append para q no se borre lo anterior
+
+borrarPendiente_and_registrarLog(JobID, Job, Msg) ->
+    ets:delete(pendientes, JobID), %lo elimino de la lista de pendientes
+    registrar_log(JobID, Job, Msg).
+
 %Con esto, cada job recibido tenemos una conex en simultaneo hablando con C
-handler_job(JobID, Job, CantRecursos, MapNodos, JobTimeout) ->
-    {ok, Socket} = gen_tcp("localhost", 8100, [binary, {packet, 2}]),
+handler_job(JobID, Job, CantRecursos, MapNodos, JobTimeout, Pid_scheduler, Pid_wait_jobs) ->
+    {ok, Socket} = gen_tcp:connect("localhost", 8100, [binary, {packet, 2}]),
     Msg_REQUEST = handler_msgs(JobID, Job, CantRecursos, MapNodos),%Msg es el msg completo para enviar a C
     Msg_RELEASE = "JOB_RELEASE" ++ JobID,
     gen_tcp:send(Socket, <<Msg_REQUEST>>), %envia job request pidiendo recursos a C, en binary
-                                            %¿Cuanto timeout?
+    ets:insert(pendientes, {JobID, Job}), %agrego job pendiente a la tabla 
+        
         case gen_tcp:recv(Socket, 0, timeout) of %recibe la respuesta de C, TIMEOUT TODV No sabemos cuanto, pondriamos mas que C
             {error, timeout} -> %aca fue job timeout, recibiste un recurso(o no) pero esperaste mucho para otro(o para tu primer) entonces dio error timeout
-               %Deberias devolver con release el recurso q te dieron
+                borrarPendiente_and_registrarLog(JobID, Job, "POSIBLE DEADLOCK"),
                 gen_tcp:send(Socket, <<Msg_RELEASE>>), %mandamos release devolviendo ese job
-                self() ! {JobID, Job, CantRecursos}; %lo mandamos d vuelta a la cola del receive para q desp intente d nuevo
+                Pid_scheduler ! {JobID, Job, CantRecursos}; %lo mandamos d vuelta al buzon del receive para q desp intente d nuevo
 
             {ok, Bin} -> %Si no dio error de timeout
                 case binary_to_list(Bin) of
-                        "JOB_GRANTED " ++ Rest -> %Si nos dieron los recursos, simulamos el job y devolvemos
-                        io:format("Simulando trabajo. . .~n"),
-                        timer:sleep(2000),
-                        io:format("Trabajo finalizado!.~n"),
-                        gen_tcp:send(Socket, <<Msg_RELEASE>>); %mandamos release devolviendo ese job
+                        "JOB_GRANTED " ++ _Rest -> %Si nos dieron los recursos, simulamos el job y devolvemos
+                            borrarPendiente_and_registrarLog(JobID, Job, "JOB_GRANTED"),
+                            io:format("Simulando trabajo. . .~n"),
+                            timer:sleep(2000),
+                            io:format("Trabajo finalizado!.~n"),
+                            gen_tcp:send(Socket, <<Msg_RELEASE>>),
+                            Pid_wait_jobs ! {ok}; %mandamos release devolviendo ese job
 
-                        "JOB_DENIED " ++ Rest -> %Aca no nos dieron nada de recursos nos cancelaron de una, cancelamos el job
-                        %loguearlo en el log no hacer mas nada
-                        ok;
+                        "JOB_DENIED " ++ _Rest -> %Aca no nos dieron nada de recursos nos cancelaron de una, cancelamos el job(no hacemos nd)
+                            borrarPendiente_and_registrarLog(JobID, Job, "JOB_DENIED"),
+                            Pid_wait_jobs ! {ok},
+                            ok
 
-                end;
-        end
+                end
+
+        end,
+
     gen_tcp:close(Socket).
 
 %lleva la tabla de pendientes
 % Recibe Lista donde cada elem es cada nodo
-scheduler_jobs(JobTimeout, MapNodos) -> %$Recibe jobs, analiza a que nodo pedirle cada recurso y este se lo manda al server
-        receive
+scheduler_jobs(JobTimeout, MapNodos, Pid_wait_jobs) -> %$Recibe jobs, analiza a que nodo pedirle cada recurso y este se lo manda al server
+    receive
         {JobID, Job, CantRecursos} -> %Job = "recurso:cant:recurso:cant"
-                spawn(?MODULE, handler_job, [JobID, Job, CantRecursos, MapNodos, JobTimeout]), %Recibe el job y crea un proceso q lo maneje
-                scheduler_jobs(Socket, JobTimeout, MapNodos). %llama recursivamente scheduler para q siga recibiendo jobs
+            spawn(?MODULE, handler_job, [JobID, Job, CantRecursos, MapNodos, JobTimeout, self(), Pid_wait_jobs]), %Recibe el job y crea un proceso q lo maneje
+            scheduler_jobs(JobTimeout, MapNodos, Pid_wait_jobs)%llama recursivamente scheduler para q siga recibiendo jobs
+    end. 
     
-%liberar recursos
-free_resources() ->
 
 server(N) ->
-    {ok, ListenSocket} = gen_tcp:listen(8100, [{reuseaddr, true}, {active, false}]),
     Pid_client = spawn_link(?MODULE, client, [N]),
+    register(cliente_pid, Pid_client).
 
 
-    %packet, 2 lo q hace es q en los primeros 2 bytes pone la longitud y en lo qsigue el msg
+wait_jobs(N) when N =< 0 ->
+    cliente_pid ! {fin};%Cuando terminan todos los jobs le mandamos msg avisando al cliente y ahora si puede finalizar.
+
+wait_jobs(N) ->
+    receive 
+        _ ->
+            wait_jobs(N-1)
+        end.
+
+%packet, 2 lo q hace es q en los primeros 2 bytes pone la longitud y en lo qsigue el msg
 client(N) ->
     {ok, Socket} = gen_tcp:connect("localhost", 8100, [binary, {packet, 2}]), %envio para conectarme al puerto 8100, si es exitosa devuelve ok socket
     gen_tcp:send(Socket, <<"GET_NODES\n">>), %consulto con el agente C sobre las lista de nodos q hay disponibles
     %me respondera con una lista de nodos vivos en formato de texto 
     % EJ: NODES 192.168.1.10:8100:cpu:4:mem:8192:gpu:1 ; 192.168.1.11:8101:cpu:2:mem:4096
     {ok, BinList} = gen_tcp:recv(Socket, 0),%por mas q diga lista lor recibo como un binario q luego transformo a string
-    List = binary_to_list(BinList),
-    List_nodos_separados = string:split(List, ";", all),% devuelve lista donde cada elem es un nodo con sus atributos
+    gen_tcp:close(Socket),
+    List_nodos_separados = string:split(binary_to_list(BinList), ";", all),% devuelve lista donde cada elem es un nodo con sus atributos
     ListMaximos = obtener_cant_maxima_recursos(List_nodos_separados, [0,0,0]),
     MapNodos = parsear_lista_nodos(List_nodos_separados),
-    JobTimeout = 3
-    Pid_scheduler_job = spawn_link(?MODULE, scheduler_jobs, [JobTimeout, MapNodos]),%queda esperando jobs para enviar al sv en C
-    generate_jobs(Pid_scheduler_job , N, ListMaximos, MapNodos) %generara N jobs q se los enviara a scheduler de jobs
-
-
-
-    gen_tcp:close(Socket).
-
-
-spawnear_jobs(N) ->
-
-    
-
-%consultar al agente C local sobre la lista de nodos participantes(IP, puesrto, recursos disponibles)
-%C respondera con una lista de nodos vivos en formato texto por ejemeplo
-% Ej: nodo recursos, nodo recursos
-% en Erlang usamos esa lista para construir las solicitudes JOB_REQUEST
-% (pq podemos elegir cualq nodo q tenga recursos q necesitemos, podemos pedir d varios a la vez)
+    JobTimeout = 3,
+    %TABLA DE PENDIENTES: son los jobs q estan pendientes(fueron mandados y tdv no tienen rta), ets sierve para almacenar datos de forma compartida entre procesos
+    ets:new(pendientes, [named_table, public, set]), %named table q la podemos llamar por su nombre, public cualq proceso puede acceder, set para q no repita
+    Pid_wait_jobs = spawn_link(?MODULE, wait_jobs, [N]), %Creamos wait jobs para q cliente recien termine cuando terminen de ejecutarse todos los jobs y no teremine antes
+    Pid_scheduler_job = spawn_link(?MODULE, scheduler_jobs, [JobTimeout, MapNodos, Pid_wait_jobs]),%queda esperando jobs para enviar al sv en C
+    generate_jobs(Pid_scheduler_job , N, ListMaximos),%generara N jobs q se los enviara a scheduler de jobs
+    receive 
+        {fin} -> %Cuando terminan todos los jobs le mandamos msg avisando al cliente y ahora si puede finalizar.
+            ok
+    end,
+    ets:delete(pendientes).%liberamos la tabla d procesos pendientes pq ya terminamos
 
 
 
