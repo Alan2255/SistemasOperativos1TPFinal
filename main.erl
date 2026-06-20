@@ -1,5 +1,5 @@
 -module(main).
--export([server/1, client/1, generate_jobs/3, scheduler_jobs/3, handler_job/7, wait_jobs/1]).
+-export([server/1, client/1, generate_jobs/2, scheduler_jobs/2, handler_job/5, wait_jobs/1, inicializar_sistema/1, supervisor_scheduler_jobs/2]).
 %nodos = host 
 
 obtener_cant_maxima_recursos([], ListMaximos) ->
@@ -33,11 +33,11 @@ eliminar_indice(N, Lista) ->
 %generar trabajo el cual necesitara tantos recursos, ==== dentro de ask_for_resources =====
 % %JobID comienza de 0, N es la cantidad de jobs q pedimos generar, es recursiva
 %Una vez genere el job, le mandara un msg a ask_for_resources con el IDjob y el job para que se comunique con el agente C para pedir recursos
-generate_jobs(_Pid, 0, _ListMaximos) -> %% cuando N es 0, termina
+generate_jobs(0, _ListMaximos) -> %% cuando N es 0, termina
         ok;
 
 %Armas el job con el job id y la cantidd de recursos q vas a pedir, a que nodo se lo pedira lo manejara el scheduler
-generate_jobs(Pid, N, ListMaximos) ->
+generate_jobs(N, ListMaximos) ->
     [MaxCPU, MaxMEM, MaxGPU] = ListMaximos,
     JobID_int = erlang:unique_integer(), %genera un entero unico en toda la instancia actual del sistema(maq virtual BEAM)
     JobID = integer_to_list(JobID_int),
@@ -52,7 +52,7 @@ generate_jobs(Pid, N, ListMaximos) ->
             Cantidad = integer_to_list(rand:uniform((lists:nth(Indice_recurso, ListMaximos)))),%Cant random del recurso elegido de 1 hasta lo max q pueda pedir
 
             Job = Recurso ++ ":" ++ Cantidad, %esto crea el Job EJ : "recursorandom:numrandom"
-            Pid ! {JobID, Job, 1};
+            pid_scheduler_job ! {JobID, Job, 1};
 
         2 ->    
             Indice_ignorar = rand:uniform(3),
@@ -67,7 +67,7 @@ generate_jobs(Pid, N, ListMaximos) ->
             Cantidad2 = integer_to_list(rand:uniform(Cant2)),
             
             Job = Recurso1 ++ ":" ++ Cantidad1 ++ ":" ++ Recurso2 ++ ":" ++ Cantidad2,
-            Pid ! {JobID, Job, 2};
+            pid_scheduler_job ! {JobID, Job, 2};
 
         3 ->
             Recurso1 = "cpu",
@@ -80,9 +80,9 @@ generate_jobs(Pid, N, ListMaximos) ->
             Cantidad3 = integer_to_list(rand:uniform(MaxGPU)),
 
             Job = Recurso1 ++ ":" ++ Cantidad1 ++ ":" ++ Recurso2 ++ ":" ++ Cantidad2 ++ ":" ++  Recurso3 ++ ":" ++ Cantidad3,
-            Pid ! {JobID, Job, 3}
+            pid_scheduler_job ! {JobID, Job, 3}
         end,
-    generate_jobs(Pid, N-1, ListMaximos).
+    generate_jobs(N-1, ListMaximos).
         
 
 %Recibe un nodo string con los datos y retorna una lista con nodo CANTCPU CANT MEM CANTGPU        
@@ -186,53 +186,70 @@ borrarPendiente_and_registrarLog(JobID, Job, Msg) ->
     ets:delete(pendientes, JobID), %lo elimino de la lista de pendientes
     registrar_log(JobID, Job, Msg).
 
-%Con esto, cada job recibido tenemos una conex en simultaneo hablando con C
-handler_job(JobID, Job, CantRecursos, MapNodos, JobTimeout, Pid_scheduler, Pid_wait_jobs) ->
-    {ok, Socket} = gen_tcp:connect("localhost", 8100, [binary, {packet, 2}]),
+
+armar_msgs(JobID, Job, CantRecursos, MapNodos) ->
     Msg_REQUEST = handler_msgs(JobID, Job, CantRecursos, MapNodos),%Msg es el msg completo para enviar a C
     Msg_RELEASE = "JOB_RELEASE" ++ JobID,
-    gen_tcp:send(Socket, <<Msg_REQUEST>>), %envia job request pidiendo recursos a C, en binary
-    ets:insert(pendientes, {JobID, Job}), %agrego job pendiente a la tabla 
-        
-        case gen_tcp:recv(Socket, 0, timeout) of %recibe la respuesta de C, TIMEOUT TODV No sabemos cuanto, pondriamos mas que C
-            {error, timeout} -> %aca fue job timeout, recibiste un recurso(o no) pero esperaste mucho para otro(o para tu primer) entonces dio error timeout
-                borrarPendiente_and_registrarLog(JobID, Job, "POSIBLE DEADLOCK"),
-                gen_tcp:send(Socket, <<Msg_RELEASE>>), %mandamos release devolviendo ese job
-                Pid_scheduler ! {JobID, Job, CantRecursos}; %lo mandamos d vuelta al buzon del receive para q desp intente d nuevo
+    {Msg_REQUEST, Msg_RELEASE}.
 
-            {ok, Bin} -> %Si no dio error de timeout
-                case binary_to_list(Bin) of
-                        "JOB_GRANTED " ++ _Rest -> %Si nos dieron los recursos, simulamos el job y devolvemos
-                            borrarPendiente_and_registrarLog(JobID, Job, "JOB_GRANTED"),
-                            io:format("Simulando trabajo. . .~n"),
-                            timer:sleep(2000),
-                            io:format("Trabajo finalizado!.~n"),
-                            gen_tcp:send(Socket, <<Msg_RELEASE>>),
-                            Pid_wait_jobs ! {ok}; %mandamos release devolviendo ese job
 
-                        "JOB_DENIED " ++ _Rest -> %Aca no nos dieron nada de recursos nos cancelaron de una, cancelamos el job(no hacemos nd)
-                            borrarPendiente_and_registrarLog(JobID, Job, "JOB_DENIED"),
-                            Pid_wait_jobs ! {ok},
-                            ok
 
-                end
+%Con esto, cada job recibido tenemos una conex en simultaneo hablando con C
+handler_job(JobID, Job, CantRecursos, JobTimeout, Pid_wait_jobs) ->
+    case gen_tcp:connect("localhost", 8100, [binary, {packet, 2}]) of 
+        {ok, Socket} ->
 
-        end,
+            gen_tcp:send(Socket, <<"GET_NODES\n">>), %consulto con el agente C, me respondera con una lista de nodos vivos en formato de texto, EJ: NODES 192.168.1.10:8100:cpu:4:mem:8192:gpu:1 
+            {ok, BinList} = gen_tcp:recv(Socket, 0),%por mas q diga lista lor recibo como un binario q luego transformo a string
 
-    gen_tcp:close(Socket).
+            List_nodos_separados = string:split(binary_to_list(BinList), ";", all),% devuelve lista donde cada elem es un nodo con sus atributos
+            MapNodos = parsear_lista_nodos(List_nodos_separados),
+            {Msg_REQUEST, Msg_RELEASE} = armar_msgs(JobID, Job, CantRecursos, MapNodos),
+
+            gen_tcp:send(Socket, <<Msg_REQUEST>>), %envia job request pidiendo recursos a C, en binary
+            ets:insert(pendientes, {JobID, Job}), %agrego job pendiente a la tabla 
+                
+                case gen_tcp:recv(Socket, 0, JobTimeout) of %recibe la respuesta de C, TIMEOUT TODV No sabemos cuanto, pondriamos mas que C
+                    {error, timeout} -> %aca fue job timeout, recibiste un recurso(o no) pero esperaste mucho para otro(o para tu primer) entonces dio error timeout la fun tcp rcv
+                        borrarPendiente_and_registrarLog(JobID, Job, "POSIBLE DEADLOCK"),
+                        gen_tcp:send(Socket, <<Msg_RELEASE>>), %mandamos release devolviendo ese job
+                        pid_scheduler_job ! {JobID, Job, CantRecursos}; %lo mandamos d vuelta al buzon del receive para q desp intente d nuevo
+
+                    {ok, Bin} -> %Si no dio error de timeout
+                        case binary_to_list(Bin) of
+                                "JOB_GRANTED " ++ _Rest -> %Si nos dieron los recursos, simulamos el job y devolvemos
+                                    borrarPendiente_and_registrarLog(JobID, Job, "JOB_GRANTED"),
+                                    io:format("Simulando trabajo. . .~n"),
+                                    timer:sleep(2000),
+                                    io:format("Trabajo finalizado!.~n"),
+                                    gen_tcp:send(Socket, <<Msg_RELEASE>>),%mandamos release devolviendo ese job
+                                    Pid_wait_jobs ! {ok}; %avisamos q el job termino
+
+                                "JOB_DENIED " ++ _Rest -> %Aca no nos dieron nada de recursos nos cancelaron de una, cancelamos el job(no hacemos nd)
+                                    borrarPendiente_and_registrarLog(JobID, Job, "JOB_DENIED"),
+                                    Pid_wait_jobs ! {ok},
+                                    ok
+                        end
+                end,
+            gen_tcp:close(Socket);
+            {error, _Reason} ->
+                Pid_wait_jobs ! {ok} %Avisamos q el job termino auque fue con error
+        end.
 
 %lleva la tabla de pendientes
-% Recibe Lista donde cada elem es cada nodo
-scheduler_jobs(JobTimeout, MapNodos, Pid_wait_jobs) -> %$Recibe jobs, analiza a que nodo pedirle cada recurso y este se lo manda al server
+% Recibe Lista donde cada elem es cada nodo, aca usamos spawn y no spawn_link pq si muere el handler debe seguir atendiendo otros jobs.
+scheduler_jobs(JobTimeout, Pid_wait_jobs) -> %$Recibe jobs, analiza a que nodo pedirle cada recurso y este se lo manda al server
     receive
         {JobID, Job, CantRecursos} -> %Job = "recurso:cant:recurso:cant"
-            spawn(?MODULE, handler_job, [JobID, Job, CantRecursos, MapNodos, JobTimeout, self(), Pid_wait_jobs]), %Recibe el job y crea un proceso q lo maneje
-            scheduler_jobs(JobTimeout, MapNodos, Pid_wait_jobs)%llama recursivamente scheduler para q siga recibiendo jobs
+            spawn(?MODULE, handler_job, [JobID, Job, CantRecursos, JobTimeout,Pid_wait_jobs]), %Recibe el job y crea un proceso q lo maneje
+            scheduler_jobs(JobTimeout, Pid_wait_jobs)%llama recursivamente scheduler para q siga recibiendo jobs
+
+            %Si recibe recurso creado artificialmente, ver tdv
     end. 
     
 
 server(N) ->
-    Pid_client = spawn_link(?MODULE, client, [N]),
+    Pid_client = spawn_link(?MODULE, client, [N]), %Si el client muere el server se entera
     register(cliente_pid, Pid_client).
 
 
@@ -245,28 +262,58 @@ wait_jobs(N) ->
             wait_jobs(N-1)
         end.
 
-%packet, 2 lo q hace es q en los primeros 2 bytes pone la longitud y en lo qsigue el msg
-client(N) ->
-    {ok, Socket} = gen_tcp:connect("localhost", 8100, [binary, {packet, 2}]), %envio para conectarme al puerto 8100, si es exitosa devuelve ok socket
-    gen_tcp:send(Socket, <<"GET_NODES\n">>), %consulto con el agente C sobre las lista de nodos q hay disponibles
-    %me respondera con una lista de nodos vivos en formato de texto 
-    % EJ: NODES 192.168.1.10:8100:cpu:4:mem:8192:gpu:1 ; 192.168.1.11:8101:cpu:2:mem:4096
-    {ok, BinList} = gen_tcp:recv(Socket, 0),%por mas q diga lista lor recibo como un binario q luego transformo a string
-    gen_tcp:close(Socket),
+%Se conecta al socket, obtiene la lista con los nodos disponibles si funciona bien o exit si da error
+get_nodes_or_exit()-> %packet, 2 lo q hace es q en los primeros 2 bytes pone la longitud y en lo qsigue el msg
+    case  gen_tcp:connect("localhost", 8100, [binary, {packet, 2}]) of %envio para conectarme al puerto 8100, si es exitosa devuelve ok socket
+        {ok, Socket} ->
+            gen_tcp:send(Socket, <<"GET_NODES\n">>), %consulto con el agente C respondera con una lista con los nodos disponoinbiles, necesito esto para armar listMax para generar los jobs
+            % EJ: NODES 192.168.1.10:8100:cpu:4:mem:8192:gpu:1 ; 192.168.1.11:8101:cpu:2:mem:4096
+            case gen_tcp:recv(Socket, 0) of
+                {ok, BinList} -> 
+                    gen_tcp:close(Socket),
+                    {ok, BinList};
+                {error, Reason} ->
+                    gen_tcp:close(Socket),
+                    exit({error_al_conectar, Reason}) %por mas q diga lista lor recibo como un binario q luego transformo a string
+            end;
+        {error, Reason} ->
+            exit({error_al_conectar, Reason})
+    end.
+
+esperar_y_limpiar()->
+    receive 
+        {fin} ->  ok%Cuando terminan todos los jobs le mandamos msg avisando al cliente y ahora si puede finalizar.
+    end,
+    ets:delete(pendientes).%liberamos la tabla d procesos pendientes pq ya terminamos
+
+%Se encarga de volver a levantar el scheduler_jobs si muere
+supervisor_scheduler_jobs(JobTimeout, Pid_wait_jobs) ->
+    process_flag(trap_exit, true), %hace que la señales de salida q provengan de procesos linkeades no maten automaticamente al proceso sino que se transf en msg que llegan al mailbox
+    Pid_scheduler_job = spawn_link(?MODULE, scheduler_jobs, [JobTimeout, Pid_wait_jobs]), %queda esperando jobs para enviar al sv en C
+    register(pid_scheduler_job, Pid_scheduler_job), % lo registramos aca entonce ssi se cae lo volvemos a levantar y a registrar
+    receive 
+    {'EXIT', _From, _Reason} ->
+        unregister(pid_scheduler_job),
+        supervisor_scheduler_jobs(JobTimeout, Pid_wait_jobs) %"Busca esta funcion en el modulo actual" entonces cuando volves a compilar la busca la nueva compilacion"
+    end.
+
+%Obtiene la lista de nodos activos,crea tabla de PENDIENTES crea el proceso scheduler job y wait job para ver cuando terminar, retorna el pid de estos
+inicializar_sistema(N) ->
+    {ok, BinList} = get_nodes_or_exit(),
     List_nodos_separados = string:split(binary_to_list(BinList), ";", all),% devuelve lista donde cada elem es un nodo con sus atributos
     ListMaximos = obtener_cant_maxima_recursos(List_nodos_separados, [0,0,0]),
-    MapNodos = parsear_lista_nodos(List_nodos_separados),
-    JobTimeout = 3,
+    JobTimeout = 5,
     %TABLA DE PENDIENTES: son los jobs q estan pendientes(fueron mandados y tdv no tienen rta), ets sierve para almacenar datos de forma compartida entre procesos
     ets:new(pendientes, [named_table, public, set]), %named table q la podemos llamar por su nombre, public cualq proceso puede acceder, set para q no repita
     Pid_wait_jobs = spawn_link(?MODULE, wait_jobs, [N]), %Creamos wait jobs para q cliente recien termine cuando terminen de ejecutarse todos los jobs y no teremine antes
-    Pid_scheduler_job = spawn_link(?MODULE, scheduler_jobs, [JobTimeout, MapNodos, Pid_wait_jobs]),%queda esperando jobs para enviar al sv en C
-    generate_jobs(Pid_scheduler_job , N, ListMaximos),%generara N jobs q se los enviara a scheduler de jobs
-    receive 
-        {fin} -> %Cuando terminan todos los jobs le mandamos msg avisando al cliente y ahora si puede finalizar.
-            ok
-    end,
-    ets:delete(pendientes).%liberamos la tabla d procesos pendientes pq ya terminamos
+    spawn_link(?MODULE, supervisor_scheduler_jobs, [JobTimeout, Pid_wait_jobs]),%Si se cae el scheduler job lo levanta, spawnlink para q el server se entere si muere el supervisor
+    ListMaximos.
+
+%Inicializa el sistema y manda a generar los N jobs y espera a q terminen 
+client(N) ->
+    ListMaximos = inicializar_sistema(N),
+    generate_jobs(N, ListMaximos), %generara N jobs q se los enviara a scheduler de jobs
+    esperar_y_limpiar(). %espera q terminen todos los jobs y elimina la tabla de pendientes
 
 
 
