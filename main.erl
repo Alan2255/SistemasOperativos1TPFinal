@@ -1,5 +1,5 @@
 -module(main).
--export([server/1, client/1, generate_jobs/2, scheduler_jobs/2, handler_job/5, wait_jobs/1, inicializar_sistema/1, supervisor_scheduler_jobs/2]).
+-export([server/2, client/2, generate_jobs/2, scheduler_jobs/2, handler_job/5, wait_jobs/1, inicializar_sistema/1, supervisor_scheduler_jobs/2]).
 %nodos = host 
 
 obtener_cant_maxima_recursos([], ListMaximos) ->
@@ -234,7 +234,7 @@ handler_job(JobID, Job, CantRecursos, JobTimeout, Pid_wait_jobs) ->
             gen_tcp:close(Socket);
             {error, _Reason} ->
                 Pid_wait_jobs ! {ok} %Avisamos q el job termino auque fue con error
-        end.
+    end.
 
 %lleva la tabla de pendientes
 % Recibe Lista donde cada elem es cada nodo, aca usamos spawn y no spawn_link pq si muere el handler debe seguir atendiendo otros jobs.
@@ -248,13 +248,13 @@ scheduler_jobs(JobTimeout, Pid_wait_jobs) -> %$Recibe jobs, analiza a que nodo p
     end. 
     
 
-server(N) ->
-    Pid_client = spawn_link(?MODULE, client, [N]), %Si el client muere el server se entera
+server(Modo, N) ->
+    Pid_client = spawn_link(?MODULE, client, [Modo, N]), %Si el client muere el server se entera
     register(cliente_pid, Pid_client).
 
 
 wait_jobs(N) when N =< 0 ->
-    cliente_pid ! {fin};%Cuando terminan todos los jobs le mandamos msg avisando al cliente y ahora si puede finalizar.
+    cliente_pid ! fin;%Cuando terminan todos los jobs le mandamos msg avisando al cliente y ahora si puede finalizar.
 
 wait_jobs(N) ->
     receive 
@@ -280,11 +280,6 @@ get_nodes_or_exit()-> %packet, 2 lo q hace es q en los primeros 2 bytes pone la 
             exit({error_al_conectar, Reason})
     end.
 
-esperar_y_limpiar()->
-    receive 
-        {fin} ->  ok%Cuando terminan todos los jobs le mandamos msg avisando al cliente y ahora si puede finalizar.
-    end,
-    ets:delete(pendientes).%liberamos la tabla d procesos pendientes pq ya terminamos
 
 %Se encarga de volver a levantar el scheduler_jobs si muere
 supervisor_scheduler_jobs(JobTimeout, Pid_wait_jobs) ->
@@ -310,10 +305,25 @@ inicializar_sistema(N) ->
     ListMaximos.
 
 %Inicializa el sistema y manda a generar los N jobs y espera a q terminen 
-client(N) ->
+client(Modo, N) ->
     ListMaximos = inicializar_sistema(N),
-    generate_jobs(N, ListMaximos), %generara N jobs q se los enviara a scheduler de jobs
-    esperar_y_limpiar(). %espera q terminen todos los jobs y elimina la tabla de pendientes
+    case Modo of
+        random ->
+            generate_jobs(N, ListMaximos), %generara N jobs q se los enviara a scheduler de jobs
+            receive 
+                fin ->  ok%Cuando terminan todos los jobs se manda solo el msg fin avisando al cliente y ahora si puede finalizar.
+            end,
+            ets:delete(pendientes);%liberamos la tabla d procesos pendientes pq ya terminamos
+
+        manual ->
+            %jobs los genera el usuario creando los jobs como el quiera y mandando msg a pid_scheduler_job,
+            % deben tener la forma de recursorandom:numrandom"
+            %Terminara cuando el usuario mande pid_cliente ! fin o cuando ya generaste N jobs q le pasaste como parametro
+            receive 
+                fin ->  ok 
+            end,
+            ets:delete(pendientes)%liberamos la tabla d procesos pendientes pq ya terminamos
+    end.
 
 
 
