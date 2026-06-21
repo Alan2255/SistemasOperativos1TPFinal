@@ -34,6 +34,9 @@ void agent_manager_shutdown(void);
 // Agrega un agente
 void agent_manager_add(char* ip, char* port, int count_resources, Resource* resources, int timerfd);
 
+// Busca un agente por su ip y devuelve un puntero al mismo si existe
+AgentNode* agent_manager_get(char* ip);
+
 // Busca un agente por su ip y actualiza sus recursos
 void agent_manager_update(char* ip, Resource* resources);
 

@@ -62,6 +62,12 @@ void agent_manager_add(char* ip, char* port, int count_resources, Resource* reso
     hash_set(table_agent, ip, nuevo_nodo);
 }
 
+// Busca un agente por su ip y lo devuelve si existe
+AgentNode* agent_manager_get(char* ip) {
+    if (!table_agent) return NULL;
+    return hash_get(table_agent, ip);
+} 
+
 // Busca un agente por su ip y actualiza sus recursos
 void agent_manager_update(char* ip, Resource* resources) {
     if (!table_agent || resources == NULL) return;
