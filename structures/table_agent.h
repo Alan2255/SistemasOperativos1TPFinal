@@ -1,25 +1,21 @@
 #ifndef AGENT_MANAGER_H
 #define AGENT_MANAGER_H
 
-#define RES_NAME_LEN 10
+#include "../agent/agent.h"
 
 // Recurso
 typedef struct {
-    char name[RES_NAME_LEN];
+    char name[MAX_BYTES_NAME_RESOURCE];
     int total_capacity;
     int aviable;
 } Resource;
-
-#define INET_ADDRSTRLEN 16
-#define PORTSTRLEN 6
-#define MAX_RESOURCES 5
 
 // Agente
 typedef struct {
     char ip[INET_ADDRSTRLEN];
     char port[PORTSTRLEN];
     int count_resources;
-    Resource resources[MAX_RESOURCES];
+    Resource resources[MAX_RESOURCES_NODE];
     int timerfd;
 } AgentNode;
 

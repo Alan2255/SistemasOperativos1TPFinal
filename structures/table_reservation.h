@@ -2,9 +2,7 @@
 #define RESERVATION_MANAGER_H
 
 #include <stdbool.h>
-
-#define MAX_BYTES_NAME_RESOURCE 10
-#define MAX_RESERVATIONS 100 
+#include "../agent/agent.h"
 
 // Job reservado
 typedef struct {

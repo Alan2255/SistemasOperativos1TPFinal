@@ -2,10 +2,7 @@
 #define JOB_MANAGER_H
 
 #include <stdbool.h>
-
-#define MAX_JOBS 64
-#define MAX_BYTES_NAME_RESOURCE 10
-#define MAX_JOB_RQ 16
+#include "../agent/agent.h"
 
 // Request de un recurso
 typedef struct { 
