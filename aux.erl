@@ -1,5 +1,5 @@
 -module(aux).
--export([eliminar_indice/2, inicializar_sistema/1, handler_job/5, wait_jobs/1, supervisor_scheduler_jobs/2]).
+-export([eliminar_indice/2, inicializar_sistema/2, handler_job/6, wait_jobs/1, supervisor_scheduler_jobs/3]).
 
 %========= Funciones AUXILIARES  ===============$
 %MapNodos : mapa donde key es el nodo y value lista con 3 enteros, donde cada entero representa en orden la cantidad de CPU, MEM, GPU
@@ -168,8 +168,8 @@ armar_peticiones(JobID, Job, CantRecursos, MapNodos) -> %%JobID(string), Job(str
     end.
 
 %Se intenta conectar al socket, si es exitosa, envia msg al socket con get nodes, recibe y crea el mapa con nodos y sus cantidades
-conectar_y_obtener_nodos() ->
-    case gen_tcp:connect("localhost", 8100, [binary, {packet, 2}]) of 
+conectar_y_obtener_nodos(Puerto) ->
+    case gen_tcp:connect("localhost", Puerto, [binary, {packet, 2}]) of 
         {ok, Socket} ->
             gen_tcp:send(Socket, <<"GET_NODES\n">>), %consulto con el agente C, me respondera con una lista de nodos vivos en formato de texto, EJ: NODES 192.168.1.10:8100:cpu:4:mem:8192:gpu:1 
             {ok, BinList} = gen_tcp:recv(Socket, 0),%por mas q diga lista lor recibo como un binario q luego transformo a string
@@ -208,8 +208,8 @@ procesar_respuesta(JobID, Job, CantRecursos, Socket, Msg_RELEASE, JobTimeout, Pi
     end.
 
 %Con esto, por cada job creado tenemos una conex en simultaneo hablando con C
-handler_job(JobID, Job, CantRecursos, JobTimeout, Pid_wait_jobs) ->
-    case conectar_y_obtener_nodos() of %SI la conexion fue exitosa:
+handler_job(JobID, Job, CantRecursos, JobTimeout, Pid_wait_jobs, Puerto) ->
+    case conectar_y_obtener_nodos(Puerto) of %SI la conexion fue exitosa:
         {ok, Socket, MapNodos} ->
             case armar_peticiones(JobID, Job, CantRecursos, MapNodos) of
                 {error, no_alcanza} -> %Si no pudimos armar las peticiones no alcanzaron los nodos disponibles para la cantidad requerida de algun recurso
@@ -237,9 +237,10 @@ wait_jobs(N) -> %N(int)
             wait_jobs(N-1)
         end.
 
-%Se conecta al socket, obtiene la lista con los nodos disponibles si funciona bien o exit si da error
-get_nodes_or_exit()-> %packet, 2 lo q hace es q en los primeros 2 bytes pone la longitud y en lo qsigue el msg
-    case  gen_tcp:connect("localhost", 8100, [binary, {packet, 2}]) of %envio para conectarme al puerto 8100, si es exitosa devuelve ok socket
+%Se conecta al socket, obtiene la lista con los nodos disponibles si funciona bien o exit si da error ya que no podemos hacer nada si no obtenemos los nodos disponibles.
+% 
+get_nodes_or_exit(Puerto)-> %packet, 2 lo q hace es q en los primeros 2 bytes pone la longitud y en lo qsigue el msg
+    case  gen_tcp:connect("localhost", Puerto, [binary, {packet, 2}]) of %envio para conectarme al puerto 8100, si es exitosa devuelve ok socket
         {ok, Socket} ->
             gen_tcp:send(Socket, <<"GET_NODES\n">>), %consulto con el agente C respondera con una lista con los nodos disponoinbiles, necesito esto para armar listMax para generar los jobs
             % EJ: NODES 192.168.1.10:8100:cpu:4:mem:8192:gpu:1 ; 192.168.1.11:8101:cpu:2:mem:4096
@@ -255,25 +256,29 @@ get_nodes_or_exit()-> %packet, 2 lo q hace es q en los primeros 2 bytes pone la 
             exit({error_al_conectar, Reason})
     end.
 
-%Crea el proceso scheduler_jobs y se encarga de volver a levantarlo si muere
-supervisor_scheduler_jobs(JobTimeout, Pid_wait_jobs) ->% JobTimeout(Timer en milisegundos), Pid_wait_jobs(Pid)
+%Crea el proceso scheduler_jobs, si este muere captura el error y se encarga de volver a levantarlo.
+%Recibe: JobTimeout(Timer en milisegundos), Pid_wait_jobs(Pid), Puerto(int)
+%No retorna nada, vive siempre mientras el sistema este corriendo
+supervisor_scheduler_jobs(JobTimeout, Pid_wait_jobs, Puerto) ->% JobTimeout(Timer en milisegundos), Pid_wait_jobs(Pid)
     process_flag(trap_exit, true), %hace que la señales de salida q provengan de procesos linkeades no maten automaticamente al proceso sino que se transf en msg que llegan al mailbox
-    Pid_scheduler_job = spawn_link(?MODULE, scheduler_jobs, [JobTimeout, Pid_wait_jobs]), %queda esperando jobs para enviar al sv en C
+    Pid_scheduler_job = spawn_link(?MODULE, scheduler_jobs, [JobTimeout, Pid_wait_jobs, Puerto]), %queda esperando jobs para enviar al sv en C
     register(pid_scheduler_job, Pid_scheduler_job), % lo registramos aca entonce ssi se cae lo volvemos a levantar y a registrar
     receive 
     {'EXIT', _From, _Reason} ->
         unregister(pid_scheduler_job),
-        supervisor_scheduler_jobs(JobTimeout, Pid_wait_jobs) %"Busca esta funcion en el modulo actual" entonces cuando volves a compilar la busca la nueva compilacion"
+        supervisor_scheduler_jobs(JobTimeout, Pid_wait_jobs, Puerto) %"Busca esta funcion en el modulo actual" entonces cuando volves a compilar la busca la nueva compilacion"
     end.
 
-%Obtiene la lista de nodos activos,crea tabla de PENDIENTES crea el proceso scheduler job y wait job para ver cuando terminar, retorna el pid de estos
-inicializar_sistema(N) -> %N(cantidad de jobs a crear)
-    {ok, BinList} = get_nodes_or_exit(),
+%Obtiene la lista de nodos activos, crea tabla de PENDIENTES, crea y LINKEA los procesos scheduler_job y wait_job 
+%Recibe: N(cantidad de jobs a crear), Puerto(int)
+%Retorna: ListMaximos(lista de 3 int, formada por la suma de esa cantidad entre todos los nodos disponibles)
+inicializar_sistema(N, Puerto) -> 
+    {ok, BinList} = get_nodes_or_exit(Puerto),
     List_nodos_separados = string:split(binary_to_list(BinList), ";", all),% devuelve lista donde cada elem es un nodo con sus atributos
     ListMaximos = obtener_cant_maxima_recursos(List_nodos_separados, [0,0,0]),
     JobTimeout = 5,
     %TABLA DE PENDIENTES: son los jobs q estan pendientes(fueron mandados y tdv no tienen rta), ets sierve para almacenar datos de forma compartida entre procesos
     ets:new(pendientes, [named_table, public, set]), %named table q la podemos llamar por su nombre, public cualq proceso puede acceder, set para q no repita
     Pid_wait_jobs = spawn_link(?MODULE, wait_jobs, [N]), %Creamos wait jobs para q cliente recien termine cuando terminen de ejecutarse todos los jobs y no teremine antes
-    spawn_link(?MODULE, supervisor_scheduler_jobs, [JobTimeout, Pid_wait_jobs]),%Si se cae el scheduler job lo levanta, spawnlink para q el server se entere si muere el supervisor
+    spawn_link(?MODULE, supervisor_scheduler_jobs, [JobTimeout, Pid_wait_jobs, Puerto]),%Si se cae el scheduler job lo levanta, spawnlink para q el server se entere si muere el supervisor
     ListMaximos.

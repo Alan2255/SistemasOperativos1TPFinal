@@ -1,5 +1,5 @@
 -module(main).
--export([server/2, client/2, generate_jobs/2, scheduler_jobs/2]).
+-export([server/3, client/3, generate_jobs/2, scheduler_jobs/3]).
 %nodos = host 
                         
 generate_jobs(0, _ListMaximos) -> % cuando N es 0, termina
@@ -55,22 +55,22 @@ generate_jobs(N, ListMaximos) -> %N(int), ListMaximos(lista de 3 enteros)
         
 %lleva la tabla de pendientes
 % Recibe Lista donde cada elem es cada nodo, aca usamos spawn y no spawn_link pq si muere el handler debe seguir atendiendo otros jobs.
-scheduler_jobs(JobTimeout, Pid_wait_jobs) -> %$Recibe jobs, analiza a que nodo pedirle cada recurso y este se lo manda al server
+scheduler_jobs(JobTimeout, Pid_wait_jobs, Puerto) -> %$Recibe jobs, analiza a que nodo pedirle cada recurso y este se lo manda al server
     receive
         {JobID, Job, CantRecursos} -> %Job = "recurso:cant:recurso:cant"
-            spawn(aux, handler_job, [JobID, Job, CantRecursos, JobTimeout,Pid_wait_jobs]), %Recibe el job y crea un proceso q lo maneje,  LE PASAMOS MODULO AUX ESTA AHI LA FUN
-            scheduler_jobs(JobTimeout, Pid_wait_jobs)%llama recursivamente scheduler para q siga recibiendo jobs
+            spawn(aux, handler_job, [JobID, Job, CantRecursos, JobTimeout,Pid_wait_jobs, Puerto]), %Recibe el job y crea un proceso q lo maneje,  LE PASAMOS MODULO AUX ESTA AHI LA FUN
+            scheduler_jobs(JobTimeout, Pid_wait_jobs, Puerto)%llama recursivamente scheduler para q siga recibiendo jobs
     end. 
     
 
-server(Modo, N) ->
-    Pid_client = spawn_link(?MODULE, client, [Modo, N]), %Si el client muere el server se entera
+server(Modo, N, Puerto) ->
+    Pid_client = spawn_link(?MODULE, client, [Modo, N, Puerto]), %Si el client muere el server se entera
     register(cliente_pid, Pid_client).
 
 
 %Inicializa el sistema y manda a generar los N jobs y espera a q terminen 
-client(Modo, N) ->
-    ListMaximos = aux:inicializar_sistema(N),
+client(Modo, N, Puerto) ->
+    ListMaximos = aux:inicializar_sistema(N, Puerto),
     case Modo of
         random ->
             generate_jobs(N, ListMaximos), %generara N jobs q se los enviara a scheduler de jobs
