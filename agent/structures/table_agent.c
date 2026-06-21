@@ -51,12 +51,12 @@ void agent_manager_add(char* ip, char* port, int count_resources, Resource* reso
     strncpy(nuevo_nodo->port, port, PORTSTRLEN - 1);
     nuevo_nodo->port[PORTSTRLEN - 1] = '\0';
     
-    nuevo_nodo->sock = -1;
+    nuevo_nodo->fdinfo = NULL;
     nuevo_nodo->count_resources = count_resources;
     nuevo_nodo->timerfd = timerfd;
 
     if (resources != NULL && count_resources > 0) {
-        int a_copiar = (count_resources > MAX_RESOURCES) ? MAX_RESOURCES : count_resources;
+        int a_copiar = (count_resources > MAX_RESOURCES_NODE) ? MAX_RESOURCES_NODE : count_resources;
         memcpy(nuevo_nodo->resources, resources, a_copiar * sizeof(Resource));
     }
 
@@ -70,11 +70,27 @@ AgentNode* agent_manager_get(char* ip) {
 } 
 
 // Busca un agente por su ip y devuelve su socket si existe
-int agent_manager_get_sock(char* ip) {
+FdInfo* agent_manager_get_fdinfo(char* ip) {
     if (!table_agent) return NULL;
     AgentNode *node = hash_get(table_agent, ip);
-    if (node == NULL) return -2;
-    return node->sock;
+    if (node == NULL) return NULL;
+    return node->fdinfo;
+}
+
+// Busca un agente por su ip y actualiza su timerfd
+void agent_manager_set_fdinfo(const char *ip, FdInfo* newFdinfo) {
+    if (!table_agent) return;
+
+    AgentNode *agente = agent_manager_get((char*)ip);
+    if (agente == NULL) return;
+    
+    if (agente->fdinfo != NULL) {
+        if (agente->fdinfo->data != NULL) {
+            free(agente->fdinfo->data);
+        }
+        free(agente->fdinfo);
+    }
+    agente->fdinfo = newFdinfo;
 }
 
 // Busca un agente por su ip y actualiza sus recursos
@@ -87,7 +103,7 @@ void agent_manager_update(char* ip, Resource* resources) {
     }
 }
 
-// Busca un agente por su ip y devuelve su timerfd
+// Busca un agente por su ip y devuelve su timerfd si existe
 int agent_manager_get_timerfd(const char *ip) {
     if (!table_agent) return -2;
 
@@ -97,6 +113,26 @@ int agent_manager_get_timerfd(const char *ip) {
     }
     
     return agente->timerfd;
+}
+
+// Busca un agente por su ip y actualiza su timerfd
+void agent_manager_set_timerfd(const char *ip, int newTimerfd) {
+    if (!table_agent) return;
+
+    AgentNode *agente = agent_manager_get((char*)ip);
+    if (agente == NULL) return;
+    
+    agente->timerfd = newTimerfd;
+}
+
+// Busca un agente por su ip y devuelve su puerto si existe
+char* agent_manager_get_port(const char *ip) {
+    if (!table_agent) return NULL;
+
+    AgentNode *agente = agent_manager_get((char*)ip);
+    if (agente == NULL) return NULL;
+    
+    return agente->port;
 }
 
 // Elimina un agente

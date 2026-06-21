@@ -2,11 +2,12 @@
 #define JOB_MANAGER_H
 
 #include <stdbool.h>
+#include <arpa/inet.h>
 #include "../agent.h"
 
 // Request de un recurso
 typedef struct { 
-    int dest_fd; // Socket de conexión del nodo al que va la petición
+    char dest_ip[INET_ADDRSTRLEN];
     char res[MAX_BYTES_NAME_RESOURCE];
     int amount; 
 } job_req_t;

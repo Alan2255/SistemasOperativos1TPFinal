@@ -24,7 +24,7 @@ int parse_announce(char *msg, char *port, Resource *resources, int *res_count) {
         char* subtokens[2]; // <res>:<amount>
         tokenize_str(tokens[2+i], ":", 2, subtokens);
         strncpy(resources[i].name, subtokens[0], MAX_BYTES_NAME_RESOURCE-1);
-        resources[i].aviable = atoi(subtokens[1]);
+        resources[i].available = atoi(subtokens[1]);
     }
     return 0;
 }

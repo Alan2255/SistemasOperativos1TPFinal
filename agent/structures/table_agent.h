@@ -1,26 +1,24 @@
 #ifndef AGENT_MANAGER_H
 #define AGENT_MANAGER_H
 
-#define RES_NAME_LEN 10
+#include "../agent.h"
+#include "../functions/fdinfo.h"
+#include <arpa/inet.h>
 
 // Recurso
 typedef struct {
-    char name[RES_NAME_LEN];
+    char name[MAX_BYTES_NAME_RESOURCE];
     int total_capacity;
-    int aviable;
+    int available;
 } Resource;
-
-#define INET_ADDRSTRLEN 16
-#define PORTSTRLEN 6
-#define MAX_RESOURCES 5
 
 // Agente
 typedef struct {
     char ip[INET_ADDRSTRLEN];
     char port[PORTSTRLEN];
-    int sock;
+    FdInfo* fdinfo;
     int count_resources;
-    Resource resources[MAX_RESOURCES];
+    Resource resources[MAX_RESOURCES_NODE];
     int timerfd;
 } AgentNode;
 
@@ -39,13 +37,22 @@ void agent_manager_add(char* ip, char* port, int count_resources, Resource* reso
 AgentNode* agent_manager_get(char* ip);
 
 // Busca un agente por su ip y devuelve su socket si existe
-int agent_manager_get_sock(char* ip);
+FdInfo* agent_manager_get_fdinfo(char* ip);
+
+// Busca un agente por su ip y actualiza su fdinfo
+void agent_manager_set_fdinfo(const char *ip, FdInfo* newFdinfo);
 
 // Busca un agente por su ip y actualiza sus recursos
 void agent_manager_update(char* ip, Resource* resources);
 
-// Busca un agente por su ip y devuelve su timerfd
+// Busca un agente por su ip y devuelve su timerfd si existe
 int agent_manager_get_timerfd(const char *ip);
+
+// Busca un agente por su ip y actualiza su timerfd
+void agent_manager_set_timerfd(const char *ip, int newTimerfd);
+
+// Busca un agente por su ip y devuelve su puerto si existe
+char* agent_manager_get_port(const char *ip);
 
 // Elimina un agente
 void agent_manager_delete(const char *ip);
