@@ -1,11 +1,14 @@
 -module(main).
 -export([server/3, client/3, generate_jobs/2, scheduler_jobs/3]).
 %nodos = host 
-                        
+                 
+%Una vez llega a 0, termina.
 generate_jobs(0, _ListMaximos) -> % cuando N es 0, termina
         ok;
 
 %Arma el job con el jobID y la cantidd de recursos q requerira, a que nodo se lo pedira lo manejara el scheduler
+% Envia por mensaje JobID(int), Job(string), CantRecursos(int) al proceso scheduler_job
+% Recibe: N(int), ListMaximos(lista de 3 enteros)
 generate_jobs(N, ListMaximos) -> %N(int), ListMaximos(lista de 3 enteros)
     [MaxCPU, MaxMEM, MaxGPU] = ListMaximos,
     JobID_int = erlang:unique_integer(), %genera un entero unico en toda la instancia actual del sistema(maq virtual BEAM)
@@ -52,23 +55,27 @@ generate_jobs(N, ListMaximos) -> %N(int), ListMaximos(lista de 3 enteros)
             pid_scheduler_job ! {JobID, Job, 3}
         end,
     generate_jobs(N-1, ListMaximos).%Ya generamos un job restamos el N de cantidad a generar y llamamos de nuevo a la funcion.
-        
-%lleva la tabla de pendientes
-% Recibe Lista donde cada elem es cada nodo, aca usamos spawn y no spawn_link pq si muere el handler debe seguir atendiendo otros jobs.
-scheduler_jobs(JobTimeout, Pid_wait_jobs, Puerto) -> %$Recibe jobs, analiza a que nodo pedirle cada recurso y este se lo manda al server
+
+
+% Recibe por mensaje JobID(int), Job(string), CantRecursos(int) y crea SIN LINK un proceso que maneje este job, se vuelve a llamar recursivamente para seguir atendiendo jobs
+% handler_job es creado sin link ya que si muere o le pasa algo a ese job no nos importa queremos seguir atendiendo los proximos.
+% Recibe : JobTimeout(int), Pid_wait_jobs(Pid), Puerto(int)
+scheduler_jobs(JobTimeout, Pid_wait_jobs, Puerto) -> 
     receive
         {JobID, Job, CantRecursos} -> %Job = "recurso:cant:recurso:cant"
             spawn(aux, handler_job, [JobID, Job, CantRecursos, JobTimeout,Pid_wait_jobs, Puerto]), %Recibe el job y crea un proceso q lo maneje,  LE PASAMOS MODULO AUX ESTA AHI LA FUN
             scheduler_jobs(JobTimeout, Pid_wait_jobs, Puerto)%llama recursivamente scheduler para q siga recibiendo jobs
     end. 
     
-
+%Crea y linkea el proceso client
+% Recibe: Modo(atomo), N(int), Puerto(int) 
 server(Modo, N, Puerto) ->
     Pid_client = spawn_link(?MODULE, client, [Modo, N, Puerto]), %Si el client muere el server se entera
     register(cliente_pid, Pid_client).
 
 
-%Inicializa el sistema y manda a generar los N jobs y espera a q terminen 
+%Inicializa el sistema y manda a generar los N jobs y espera a q terminen
+% Recibe: Modo(atomo), N(int), Puerto(int) 
 client(Modo, N, Puerto) ->
     ListMaximos = aux:inicializar_sistema(N, Puerto),
     case Modo of
@@ -86,7 +93,10 @@ client(Modo, N, Puerto) ->
             receive 
                 fin ->  ok 
             end,
-            ets:delete(pendientes)%liberamos la tabla d procesos pendientes pq ya terminamos
+            ets:delete(pendientes);%liberamos la tabla d procesos pendientes pq ya terminamos
+        _ -> 
+            io:format("Los modos son: manual o random~n"),
+            exit({modo_invalido, Modo})
     end.
 
 

@@ -64,7 +64,10 @@ repartir_entre_nodos(Indice, CantidadRestante, [{Host, Recursos} | Resto]) -> %I
 %En el case busca en el mapa de nodos el primer nodo q tenga suficiente recurso segun el tipo de recurso pedido y su cant requerida
 %%Devuelve una lista con los nodos a los cuales pedir y cuanto le pide a cada uno
 %Si encuentra en 1 pasa lo de true y sino tiene q buscar entre mas nodos para completar
-elegir_nodos(Recurso, Cantidad, MapNodos) -> %Recurso(string), Cantidad(int), MapNodos(map)
+% Recibe: %Recurso(string), Cantidad(int), MapNodos(map)
+% Retorna {error, no_alcanza} si no alcanzaron los nodos para la cantidad que requerias
+% Retorna Lista de tuplas de la forma [{Nodo1, CantidadTomada}, {Nodo2, CantidadTomada2}, etc]
+elegir_nodos(Recurso, Cantidad, MapNodos) -> 
     Nodos = maps:to_list(MapNodos), %convierte mapa en una lista d tuplas EJ :[{Nodo1, [CPU, MEM, GPU]}, {Nodo2, [CPU, MEM, GPU]}] etc
     Indice = case Recurso of%convierte el recurso pedido en un indice de la lista de recursos
         "cpu" -> 1;
@@ -82,10 +85,13 @@ elegir_nodos(Recurso, Cantidad, MapNodos) -> %Recurso(string), Cantidad(int), Ma
             repartir_entre_nodos(Indice, Cantidad, Nodos)%Si no lo encontro reetornamos error no hay nodo
     end.
     
-%Funcion que devuelve el msg armado con el job, luego solo faltaria agregarle la peticion y el JobID.
-armar_msg(Recurso, Cant, MapNodos) -> %Recurso(string), Cant(string), MapNodos(map)
+%Funcion que devuelve el msg armado con el job de cuanto recurso le pedis a cada nodo., luego solo faltaria agregarle la peticion y el JobID.
+% Recibe: Recurso(string), Cant(string), MapNodos(map)
+% Retorna {error, no_alcanza} si no alcanzaron los nodos para la cantidad que requerias
+% Retorna string Ej: "@Nodo:Recurso:Cant @Nodo:Recurso:Cant"
+armar_msg(Recurso, Cant, MapNodos) -> 
     case elegir_nodos(Recurso, list_to_integer(Cant), MapNodos) of 
-        {error, no_alcanza} -> %devuelve esto si no alcanzaron los nodos para la cantidad q vos querias
+        {error, no_alcanza} -> 
             {error, no_alcanza};
 
         ListNodoCantidad -> %devuelve la lista de tuplas [{Nodo1, CantidadTomada}, {Nodo2, CantidadTomada2} 
@@ -94,7 +100,10 @@ armar_msg(Recurso, Cant, MapNodos) -> %Recurso(string), Cant(string), MapNodos(m
             string:join(ListPedidoPorNodo, " ")%retorna un string donde separa cada elem de la lista con un " ", EJ: @Nodo:Recurso:Cant @Nodo:Recurso:Cant etc
     end.
 
-%Maneja el Job, lo arma el msg final para enviar al agente.
+% Crea el msg final de JOB_REQUEST 
+% Recibe: JobID(string), Job(string),CantRecursos(int) MapNodos(mapa)
+% Retorna {error, no alcanza} en caso que no alcance la cantidad de nodos
+% Retorna Msg_final(string)
 handler_msgs(JobID, Job, CantRecursos, MapNodos) -> %JobID(string), Job(string),CantRecursos(int) MapNodos(mapa)
     List_recursos = string:tokens(Job, ":"),
     case CantRecursos of 
@@ -103,9 +112,9 @@ handler_msgs(JobID, Job, CantRecursos, MapNodos) -> %JobID(string), Job(string),
             case armar_msg(Recurso1, Cant1, MapNodos) of 
                 {error, no_alcanza} ->  %Primero evaluamos el error, pq sino Msg al ser variable matchea cualquier cosa que llegue
                     {error, no_alcanza};
-                Msg -> %Msg es un string por ej: @Nodo:Recurso:Cant @Nodo:Recurso:Cant etc. 
-                    Msg_final = "JOB_REQUEST" ++ " " ++ JobID ++ Msg,
-                    {JobID, Job, Msg_final}
+                Msg -> %Msg es un string por ej: "@Nodo:Recurso:Cant @Nodo:Recurso:Cant" etc. 
+                    Msg_final = "JOB_REQUEST" ++ " " ++ JobID ++ " " ++ Msg,
+                    Msg_final
             end;
 
         2 ->
@@ -113,13 +122,13 @@ handler_msgs(JobID, Job, CantRecursos, MapNodos) -> %JobID(string), Job(string),
             case armar_msg(Recurso1, Cant1, MapNodos) of
                 {error, no_alcanza} -> 
                     {error, no_alcanza};
-                Msg1 ->
+                Msg1 -> 
                     case armar_msg(Recurso2, Cant2, MapNodos) of
                         {error, no_alcanza} -> 
                             {error, no_alcanza};
                         Msg2 ->
-                            Msg_final = "JOB_REQUEST" ++ " " ++ JobID ++ Msg1 ++ Msg2,
-                            {JobID, Job, Msg_final}
+                            Msg_final = "JOB_REQUEST" ++ " " ++ JobID ++ " " ++ Msg1 ++ " " ++ Msg2,
+                            Msg_final
                     end
             end;
 
@@ -137,37 +146,45 @@ handler_msgs(JobID, Job, CantRecursos, MapNodos) -> %JobID(string), Job(string),
                                 {error, no_alcanza} -> 
                                     {error, no_alcanza};
                                 Msg3 ->
-                                    Msg_final = "JOB_REQUEST" ++ " " ++ JobID ++ Msg1 ++ Msg2 ++ Msg3,
-                                    {JobID, Job, Msg_final}
+                                    Msg_final = "JOB_REQUEST" ++ " " ++ JobID ++ " " ++ Msg1 ++ " " ++ Msg2 ++ " " ++ Msg3,
+                                    Msg_final
                             end
                     end
             end
     end.
 
 
-%Si no existe lo crea y sino escribe al final
-% Funcion que registra en un archivo log la fecha, hora, job id, job y respuesta del agente.
-registrar_log(JobID, Job, Msg_resultado)-> %JobID(string), Job(string), Msg_Resultado(string)
+% Si no existe el archivo lo crea y sino escribe al final
+% Funcion que registra en un archivo log la fecha, hora, JobID , Job y respuesta del agente.
+% Recibe: JobID(string), Job(string), Msg_Resultado(string)
+registrar_log(JobID, Job, Msg_resultado)-> 
     {{Y,M,D}, {H,Mi,S}} = calendar:local_time(), %obtiene la fecha 
     Linea = io_lib:format("~p-~p-~p ~p:~p:~p | Job ~p | ~s | ~s~n", [Y, M, D, H, Mi, S, JobID, Job, Msg_resultado]), %Devuelve un string para usarlo, a dif de io:format que imprime directo en la consola
     file:write_file("scheduler.log", Linea , [append]). %append para q no se borre lo anterior
 
 %Borra el Job de la tabla de pendientes y registra su log.
-borrarPendiente_and_registrarLog(JobID, Job, Msg) -> %JobID(string), Job(string), Msg(String)
+%Recibe: %JobID(string), Job(string), Msg(String)
+borrarPendiente_and_registrarLog(JobID, Job, Msg) -> 
     ets:delete(pendientes, JobID), %lo elimino de la lista de pendientes
     registrar_log(JobID, Job, Msg).
 
-%Arma las peticiones que mandara a C
+%Arma las peticiones que enviara al agente C.
+% Recibe: JobID(string), Job(string), CantRecursos(int), MapNodos(mapa)
+% Retorna {error, no alcanza} si la cantidad del recurso no se puede repartir entre ninguna cantidad de nodos disponibles
+% Retorna {Msg_REQUEST(string), Msg_RELEASE(string} si la cantidad del recurso SI se pudo repartir entre la cantidad de los nodos disponibles
 armar_peticiones(JobID, Job, CantRecursos, MapNodos) -> %%JobID(string), Job(string), CantRecursos(int), MapNodos(map)
-    case handler_msgs(JobID, Job, CantRecursos, MapNodos) of %Devuelve el msg completo para enviar a si puede y sino error.
+    case handler_msgs(JobID, Job, CantRecursos, MapNodos) of %Devuelve el msg completo para enviar si puede y sino error.
         {error, no_alcanza} ->
             {error, no_alcanza};
          Msg_REQUEST ->
-            Msg_RELEASE = "JOB_RELEASE" ++ JobID, %Liberar recurso
+            Msg_RELEASE = "JOB_RELEASE" ++ " " ++ JobID, %Liberar recurso
             {Msg_REQUEST, Msg_RELEASE}
     end.
 
-%Se intenta conectar al socket, si es exitosa, envia msg al socket con get nodes, recibe y crea el mapa con nodos y sus cantidades
+%Se intenta conectar al socket, si es exitosa, envia GET_NODES para consultar sobre los nodos activos, recibe una lista en binario de estos y crea el mapa con nodos y sus cantidades
+% Recibe: Puerto(int)
+% Retorna {ok, Socket, MapNodos} si fue exitoso, donde Socket(int), MapNodos(mapa donde key es el nodo y value una lista de 3 int donde cada cantidad pertenece a CPU, MEM, GPU en ese orden.)
+% Retorna {error, Reason} si fallo al conectarse al socket.
 conectar_y_obtener_nodos(Puerto) ->
     case gen_tcp:connect("localhost", Puerto, [binary, {packet, 2}]) of 
         {ok, Socket} ->
@@ -182,15 +199,18 @@ conectar_y_obtener_nodos(Puerto) ->
             {error, Reason}
     end.    
 
-%Recibe la respuesta de la peticion enviada y maneja que hacer en cada caso.
-% JobID(string), Job(string), CantRecursos(int), 
+%Recibe la respuesta de la peticion del job enviado y maneja que hacer en cada caso, cuando termina un job, lo elimina de la tabla de Pendientes, registra su log y envia -
+%- msg a wait_jobs avisando que termino.
+% Recibe: JobID(string), Job(string), CantRecursos(int), Scoket(int), Msg_Release(string), JobTimeuot(int en milisegundos), Pid_wait_jobs(Pid).
 procesar_respuesta(JobID, Job, CantRecursos, Socket, Msg_RELEASE, JobTimeout, Pid_wait_jobs) ->
-    case gen_tcp:recv(Socket, 0, JobTimeout) of %recibe la respuesta de C, TIMEOUT TODV No sabemos cuanto, pondriamos mas que C
+    case gen_tcp:recv(Socket, 0, JobTimeout) of 
+    
         {error, timeout} -> %aca fue job timeout, recibiste un recurso(o no) pero esperaste mucho para otro(o para tu primer) entonces dio error timeout la fun tcp rcv
             borrarPendiente_and_registrarLog(JobID, Job, "POSIBLE DEADLOCK"),
             gen_tcp:send(Socket, <<Msg_RELEASE>>), %mandamos release devolviendo ese job
             pid_scheduler_job ! {JobID, Job, CantRecursos}; %lo mandamos d vuelta al buzon del receive para q desp intente d nuevo
             %Aca no mandamos ok al wait jobs pq todavia no termino este job
+            
         {ok, Bin} -> %Si no dio error de timeout
             case binary_to_list(Bin) of
                 "JOB_GRANTED " ++ _Rest -> %Si nos dieron los recursos, simulamos el job y devolvemos
@@ -201,15 +221,16 @@ procesar_respuesta(JobID, Job, CantRecursos, Socket, Msg_RELEASE, JobTimeout, Pi
                     gen_tcp:send(Socket, <<Msg_RELEASE>>),%mandamos release devolviendo ese job
                     Pid_wait_jobs ! {ok}; %avisamos q el job termino
 
-                "JOB_DENIED " ++ _Rest -> %Aca no nos dieron nada de recursos nos cancelaron de una, cancelamos el job(no hacemos nd)
+                "JOB_DENIED " ++ _Rest -> %Nos cancelaron el job, lo borramos de la tabla de pendientes, registramos el log y avisamos que termino el job
                     borrarPendiente_and_registrarLog(JobID, Job, "JOB_DENIED"),
                     Pid_wait_jobs ! {ok}
             end
     end.
 
-%Con esto, por cada job creado tenemos una conex en simultaneo hablando con C
+%Con esto, por cada job creado tenemos una conex en simultaneo hablando con el agente C, cada vez que un job termina le avisamos por mensaje a wait_jobs
+% Recibe: JobID(string), Job(string), CantRecursos(int), Pid_wait_jobs(Pid), Puerto(int)
 handler_job(JobID, Job, CantRecursos, JobTimeout, Pid_wait_jobs, Puerto) ->
-    case conectar_y_obtener_nodos(Puerto) of %SI la conexion fue exitosa:
+    case conectar_y_obtener_nodos(Puerto) of %S la conexion fue exitosa:
         {ok, Socket, MapNodos} ->
             case armar_peticiones(JobID, Job, CantRecursos, MapNodos) of
                 {error, no_alcanza} -> %Si no pudimos armar las peticiones no alcanzaron los nodos disponibles para la cantidad requerida de algun recurso
@@ -226,19 +247,22 @@ handler_job(JobID, Job, CantRecursos, JobTimeout, Pid_wait_jobs, Puerto) ->
             Pid_wait_jobs ! {ok} %Enviamos que el job termino aunque fue con error.
     end.
 
-
+%Una vez N es menor o igual a 0, envia un msg al cliente para que termine.
 wait_jobs(N) when N =< 0 ->
-    cliente_pid ! fin; %Cuando terminan todos los jobs le mandamos msg avisando al cliente y ahora si puede finalizar.
+    cliente_pid ! fin; 
 
-%Funcion para esperar a que terminen todos los jobs.
+%Funcion para esperar a que terminen los N jobs.
+% Recibe N(int)
 wait_jobs(N) -> %N(int)
     receive 
         _ ->
             wait_jobs(N-1)
         end.
 
-%Se conecta al socket, obtiene la lista con los nodos disponibles si funciona bien o exit si da error ya que no podemos hacer nada si no obtenemos los nodos disponibles.
-% 
+% Se conecta al socket, obtiene la lista con los nodos disponibles si funciona bien o exit si da error ya que no podemos hacer nada si no obtenemos los nodos disponibles.
+% Recibe: Puerto(int)
+% Retorna {ok, BinList} en caso de conexion y recibimiento exitoso, donde BinList es una lista en binario de los nodos activos disponibles con sus cantidades.
+% Retorna {error, Reason} en caso de conexion erronea, al conectarse o al hacer el recv
 get_nodes_or_exit(Puerto)-> %packet, 2 lo q hace es q en los primeros 2 bytes pone la longitud y en lo qsigue el msg
     case  gen_tcp:connect("localhost", Puerto, [binary, {packet, 2}]) of %envio para conectarme al puerto 8100, si es exitosa devuelve ok socket
         {ok, Socket} ->
@@ -257,7 +281,7 @@ get_nodes_or_exit(Puerto)-> %packet, 2 lo q hace es q en los primeros 2 bytes po
     end.
 
 %Crea el proceso scheduler_jobs, si este muere captura el error y se encarga de volver a levantarlo.
-%Recibe: JobTimeout(Timer en milisegundos), Pid_wait_jobs(Pid), Puerto(int)
+%Recibe: JobTimeout(int en milisegundos), Pid_wait_jobs(Pid), Puerto(int)
 %No retorna nada, vive siempre mientras el sistema este corriendo
 supervisor_scheduler_jobs(JobTimeout, Pid_wait_jobs, Puerto) ->% JobTimeout(Timer en milisegundos), Pid_wait_jobs(Pid)
     process_flag(trap_exit, true), %hace que la señales de salida q provengan de procesos linkeades no maten automaticamente al proceso sino que se transf en msg que llegan al mailbox
@@ -271,7 +295,7 @@ supervisor_scheduler_jobs(JobTimeout, Pid_wait_jobs, Puerto) ->% JobTimeout(Time
 
 %Obtiene la lista de nodos activos, crea tabla de PENDIENTES, crea y LINKEA los procesos scheduler_job y wait_job 
 %Recibe: N(cantidad de jobs a crear), Puerto(int)
-%Retorna: ListMaximos(lista de 3 int, formada por la suma de esa cantidad entre todos los nodos disponibles)
+%Retorna: ListMaximos(lista de 3 int, formada por la suma de la cantidad de ese recurso entre todos los nodos disponibles, donde el orden de las cantidades es CPU, MEM, GPU.)
 inicializar_sistema(N, Puerto) -> 
     {ok, BinList} = get_nodes_or_exit(Puerto),
     List_nodos_separados = string:split(binary_to_list(BinList), ";", all),% devuelve lista donde cada elem es un nodo con sus atributos
