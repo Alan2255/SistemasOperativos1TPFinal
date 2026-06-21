@@ -1,12 +1,13 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "../agent.h"
 #include "tokenize_str.h"
+#include "../structures/table_agent.h"
+#include "../agent.h"
 
 /* Parsea el anuncio "ANNOUNCE <puerto> <recursos>" (con hasta 3 recursos)
 y copia los datos en los parametros pasados. */
-int parse_announce(char *msg, char *port, struct resource_node *resources, int *res_count) {
+int parse_announce(char *msg, char *port, Resource *resources, int *res_count) {
     char* tokens[5];
     int count_tokens = tokenize_str(msg, " ", 5, tokens);
 
@@ -23,7 +24,7 @@ int parse_announce(char *msg, char *port, struct resource_node *resources, int *
         char* subtokens[2]; // <res>:<amount>
         tokenize_str(tokens[2+i], ":", 2, subtokens);
         strncpy(resources[i].name, subtokens[0], MAX_BYTES_NAME_RESOURCE-1);
-        resources[i].amount = atoi(subtokens[1]);
+        resources[i].aviable = atoi(subtokens[1]);
     }
     return 0;
 }

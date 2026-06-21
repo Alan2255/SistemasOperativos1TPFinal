@@ -1,7 +1,7 @@
 #ifndef AGENT_MANAGER_H
 #define AGENT_MANAGER_H
 
-#include "../agent/agent.h"
+#include "../agent.h"
 
 // Recurso
 typedef struct {

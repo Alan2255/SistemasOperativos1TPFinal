@@ -58,73 +58,6 @@ FdInfo* epoll_add(int fd, fdtype type, int events) {
     return info;
 }
 
-void handle_node_event(int fd, FD_TCP_Data *data) { // solo maneja event = EPOLLIN
-    char *buf = data->buf;
-    int len_buf = data->len_buf;
-
-    /* Leemos lo que llego al socket. */
-    int read = read(fd, buf+len_buf, (TAM_BUF-len_buf)-1);
-    buf[len_buf+read] = '\0';
-
-    char *request[MAX_LEN_REQUEST];
-    int len_request;
-    
-    for (char *str1 = buf, *end_of_command; ; str1 = end_of_command+1) {
-        end_of_command = strchr(str1, '\n');
-        /* Si no esta el comando completo (terminado en '\n') lo guardamos en el buffer. */
-        if (end_of_command == NULL) {
-            strcpy(buf, str1);
-            data->len_buf = strlen(str1);
-            break;
-        }
-        
-        /* Si esta, lo parseamos y realizamos la accion correspondiente. */ 
-        *end_of_command = '\0'; // ahora str1 tiene un comando valido
-        char command_name[MAX_STRLEN_COMMAND_NAME_NODE];
-        int job_id;
-        char res[MAX_STRLEN_RES];
-        int amount;
-        if (parse_node_command(str1, command_name, &job_id, res, &amount) == -1)
-            return;
-
-
-        if (strcmp(command_name, "RESERVE") == 0) {
-            /* Intentamos reservar. */
-            switch (reserve_local_res(res, amount)) { // reserve_local_resource(char* resource, int amount) = -1 -> resource/amount invalido, 0 -> cant disponible de 'res' insuficiente, 1 -> reservado
-                case -1: // resource/amount invalido
-                    write(fd, "DENIED\n", strlen("DENIED\n"))
-                    break;
-
-                case 0: // cantidad no disponible
-                    enqueue_local_res(res, amount, fd); // enqueue_local_res(char *res, int amount)
-                    break;
-
-                case 1: // concedido
-                    tabla_jobs_add(job_id, res, amount, fd) // tabla_jobs_add(int job_id, char* res, int amount, int socket);
-                    break;
-            }
-        }
-        else if (strcmp(command_name, "GRANTED") == 0) {
-            /* responder al scheduler */
-        }
-        else if (strcmp(command_name, "RELEASE") == 0) {
-            if (table_reserves_contains(fd, job_id, res)) {
-                table_reserves_dec(fd, job_id, res, amount); // decrementa el monto de 'res' en la tabla, si no hay otros recursos reservados con este job_id, elimina la entrada del job de la tabla 
-                local_res_dec(res, amount);
-            } 
-            else {
-                dequeue_res(res, fd, job_id);
-            }    
-        }
-        else if (strcmp(command_name, "DENIED") == 0) {
-            /* responder al scheduler */
-        }
-        else {
-            // algo
-        }
-    }
-}
-
 int init_sock_udp() {
     /* Creamos el socket */
     int socket = socket(AF_INET, SOCK_DGRAM, 0);
@@ -222,7 +155,7 @@ int init_listen_sock_nodes() {
     return 0;
 }
 
-/* Envia el anuncio. */
+/* Envia el anuncio. */ // TERMINAR CUANDO ESTEN LOS RECURSOS LOCALES
 int send_announce(sockudp, ) {
     char buf[TAM_BUF];
     sprintf(buf, "ANNOUNCE %d cpu:%d mem:%d", PUERTO_UDP, 
@@ -288,7 +221,7 @@ int main() {
                                         EPOLLIN);
     if (timerfd_info == NULL)
         return -1;
-    if (timerfd_start(timerfd, NODE_TIMEOUT_SEC) == -1)
+    if (timerfd_start(timerfd, ANNOUNCE_SEC) == -1)
         return -1;
 
     /* Iniciamos el event loop . */ 
@@ -315,7 +248,7 @@ int main() {
                     break;
                 case FD_NODE:
                     if (events[i].events & (EPOLLHUP | EPOLLERR)) // si un agente cerro su conexion:
-                        handle_peer_disconnect(info);
+                        handle_node_disconnect(info);
                     else
                         handle_node(info);
                     break;
