@@ -2,7 +2,7 @@
 #define JOB_MANAGER_H
 
 #include <stdbool.h>
-#include "../agent/agent.h"
+#include "../agent.h"
 
 // Request de un recurso
 typedef struct { 

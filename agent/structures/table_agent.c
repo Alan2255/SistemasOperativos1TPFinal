@@ -51,11 +51,12 @@ void agent_manager_add(char* ip, char* port, int count_resources, Resource* reso
     strncpy(nuevo_nodo->port, port, PORTSTRLEN - 1);
     nuevo_nodo->port[PORTSTRLEN - 1] = '\0';
     
+    nuevo_nodo->sock = -1;
     nuevo_nodo->count_resources = count_resources;
     nuevo_nodo->timerfd = timerfd;
 
     if (resources != NULL && count_resources > 0) {
-        int a_copiar = (count_resources > MAX_RESOURCES_NODE) ? MAX_RESOURCES_NODE : count_resources;
+        int a_copiar = (count_resources > MAX_RESOURCES) ? MAX_RESOURCES : count_resources;
         memcpy(nuevo_nodo->resources, resources, a_copiar * sizeof(Resource));
     }
 
@@ -67,6 +68,14 @@ AgentNode* agent_manager_get(char* ip) {
     if (!table_agent) return NULL;
     return hash_get(table_agent, ip);
 } 
+
+// Busca un agente por su ip y devuelve su socket si existe
+int agent_manager_get_sock(char* ip) {
+    if (!table_agent) return NULL;
+    AgentNode *node = hash_get(table_agent, ip);
+    if (node == NULL) return -2;
+    return node->sock;
+}
 
 // Busca un agente por su ip y actualiza sus recursos
 void agent_manager_update(char* ip, Resource* resources) {

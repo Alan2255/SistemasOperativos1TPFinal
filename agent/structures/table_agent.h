@@ -1,21 +1,26 @@
 #ifndef AGENT_MANAGER_H
 #define AGENT_MANAGER_H
 
-#include "../agent.h"
+#define RES_NAME_LEN 10
 
 // Recurso
 typedef struct {
-    char name[MAX_BYTES_NAME_RESOURCE];
+    char name[RES_NAME_LEN];
     int total_capacity;
     int aviable;
 } Resource;
+
+#define INET_ADDRSTRLEN 16
+#define PORTSTRLEN 6
+#define MAX_RESOURCES 5
 
 // Agente
 typedef struct {
     char ip[INET_ADDRSTRLEN];
     char port[PORTSTRLEN];
+    int sock;
     int count_resources;
-    Resource resources[MAX_RESOURCES_NODE];
+    Resource resources[MAX_RESOURCES];
     int timerfd;
 } AgentNode;
 
@@ -32,6 +37,9 @@ void agent_manager_add(char* ip, char* port, int count_resources, Resource* reso
 
 // Busca un agente por su ip y devuelve un puntero al mismo si existe
 AgentNode* agent_manager_get(char* ip);
+
+// Busca un agente por su ip y devuelve su socket si existe
+int agent_manager_get_sock(char* ip);
 
 // Busca un agente por su ip y actualiza sus recursos
 void agent_manager_update(char* ip, Resource* resources);
