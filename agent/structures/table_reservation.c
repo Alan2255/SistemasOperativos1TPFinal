@@ -34,7 +34,7 @@ void reservation_manager_shutdown(void) {
 }
 
 // Agrega una reserva
-bool reservation_add(int job_id, int src_fd, const char* res_name, int amount, int granted) {
+bool reservation_manager_add(int job_id, int src_fd, const char* res_name, int amount, int granted) {
     if (!table_reservation || !res_name) return false;
 
     reservation_t *nueva_reserva = malloc(sizeof(reservation_t));
@@ -60,7 +60,7 @@ bool reservation_add(int job_id, int src_fd, const char* res_name, int amount, i
 }
 
 // Elimina una reserva
-bool reservation_release(int job_id) {
+bool reservation_manager_release(int job_id) {
     if (!table_reservation) return false;
 
     char key[32];
@@ -75,7 +75,7 @@ bool reservation_release(int job_id) {
 }
 
 // Cambia el estado de una reserva
-bool reservation_set_granted(int job_id, int granted) {
+bool reservation_manager_set_granted(int job_id, int granted) {
     if (!table_reservation) return false;
 
     char key[32];
@@ -89,7 +89,7 @@ bool reservation_set_granted(int job_id, int granted) {
 }
 
 // Busca una reserva por ID 
-const reservation_t* reservation_get(int job_id) {
+const reservation_t* reservation_manager_get(int job_id) {
     if (!table_reservation) return NULL;
 
     char key[32];
