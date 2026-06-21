@@ -297,7 +297,7 @@ inicializar_sistema(N) ->
     {ok, BinList} = get_nodes_or_exit(),
     List_nodos_separados = string:split(binary_to_list(BinList), ";", all),% devuelve lista donde cada elem es un nodo con sus atributos
     ListMaximos = obtener_cant_maxima_recursos(List_nodos_separados, [0,0,0]),
-    JobTimeout = 5,
+    JobTimeout = 5000,
     %TABLA DE PENDIENTES: son los jobs q estan pendientes(fueron mandados y tdv no tienen rta), ets sierve para almacenar datos de forma compartida entre procesos
     ets:new(pendientes, [named_table, public, set]), %named table q la podemos llamar por su nombre, public cualq proceso puede acceder, set para q no repita
     Pid_wait_jobs = spawn_link(?MODULE, wait_jobs, [N]), %Creamos wait jobs para q cliente recien termine cuando terminen de ejecutarse todos los jobs y no teremine antes
@@ -318,7 +318,7 @@ client(Modo, N) ->
         manual ->
             %jobs los genera el usuario creando los jobs como el quiera y mandando msg a pid_scheduler_job,
             % deben tener la forma de recursorandom:numrandom"
-            %Terminara cuando el usuario mande pid_cliente ! fin o cuando ya generaste N jobs q le pasaste como parametro
+            %Terminara cuando el usuario mande cliente_pid ! fin o cuando ya generaste N jobs q le pasaste como parametro
             receive 
                 fin ->  ok 
             end,
