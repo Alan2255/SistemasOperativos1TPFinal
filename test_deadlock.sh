@@ -3,7 +3,7 @@
 # 1. Limpieza automática: explica que esto mata todo si cancelas con Ctrl+C
 trap "kill 0" EXIT
 
-# 2. Configuración: variables fáciles de entender
+# 2. Configuración: variables fáciles de entender.
 PUERTO_A=8100
 PUERTO_B=8200
 BINARIO=./agente
