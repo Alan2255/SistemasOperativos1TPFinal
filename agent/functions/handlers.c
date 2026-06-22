@@ -190,7 +190,7 @@ void handle_agent_msg(FdInfo* info) {
 
 /* Maneja la desconexion inesperada de un agente */
 void handle_agent_disconnect(FdInfo* info) {
-    // eliminar recursos concedidos a info->fd
+    reservation_manager_release_by_socket(info->fd);
     close(info->fd); 
     fd_info_destr(info);
 }
