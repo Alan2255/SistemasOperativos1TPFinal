@@ -89,11 +89,11 @@ bool reservation_manager_set_granted(int job_id, int granted) {
 }
 
 // Busca una reserva por ID 
-const reservation_t* reservation_manager_get(int job_id) {
+reservation_t* reservation_manager_get(int job_id) {
     if (!table_reservation) return NULL;
 
     char key[32];
     fun_hash(job_id, key, sizeof(key));
 
-    return (const reservation_t*)hash_get(table_reservation, key);
+    return (reservation_t*)hash_get(table_reservation, key);
 }

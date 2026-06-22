@@ -31,6 +31,6 @@ bool reservation_manager_release(int job_id);
 bool reservation_manager_set_granted(int job_id, int granted);
 
 // Busca una reserva por ID 
-const reservation_t* reservation_manager_get(int job_id);
+reservation_t* reservation_manager_get(int job_id);
 
 #endif

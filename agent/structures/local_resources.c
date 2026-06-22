@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include "local_resources.h"
 
 static Resource* resources = NULL;
@@ -105,7 +106,7 @@ int local_resources_reserve(int job_id, int socket, char* resource_name, int amo
 }
 
 // Recupera los recursos y atiende pedidos pendientes
-void local_resorces_release( int job_id, int source_fd, char* resource_name, int amount) {
+void local_resources_release( int job_id, int source_fd, char* resource_name, int amount) {
     Resource* resource = find_resource(resource_name);
     if (!resource) return;
 
@@ -158,9 +159,22 @@ void local_resorces_release( int job_id, int source_fd, char* resource_name, int
         if (resource->available >= next_res->amount) {
             queue_pop(&resource->job_pendings);
             resource->available -= next_res->amount;
-            reservation_set_granted(next_job_id, 1);
+            reservation_manager_set_granted(next_job_id, 1);
         } else {
             break;
         }
+    }
+}
+
+// Devuelve un string con los recursos locales
+void local_resources_to_str(char* buff) {
+    if (resources == NULL || resource_count == 0 || buff == NULL) {
+        return;
+    }
+
+    char* ptr = buff;
+    for (int i = 0; i < resource_count; i++) {
+        int written = sprintf(ptr, "%s:%d ", resources[i].name, resources[i].total_capacity);
+        ptr += written;
     }
 }

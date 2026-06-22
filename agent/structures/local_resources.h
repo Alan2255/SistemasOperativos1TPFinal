@@ -1,7 +1,7 @@
 #ifndef LOCAL_RESOURCES_H
 #define LOCAL_RESOURCES_H
 
-#include "../agent/agent.h"
+#include "../agent.h"
 #include "table_reservation.h"
 
 // Cola de trabajos pendientes
@@ -30,9 +30,12 @@ void local_resources_init(int num_resources, char* resource_names[], int capacit
 int local_resources_reserve(int job_id, int socket, char* resource_name, int amount);
 
 // Recupera los recursos y atiende pedidos pendientes
-void local_resorces_release(int job_id, int source_fd, char* resource_name, int amount);
+void local_resources_release(int job_id, int source_fd, char* resource_name, int amount);
 
 // Destruye los recursos locales
 void local_resources_shutdown();
+
+// Devuelve un string con los recursos locales
+void local_resources_to_str();
 
 #endif
