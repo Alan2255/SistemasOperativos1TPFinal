@@ -89,45 +89,80 @@ void local_resources_shutdown() {
 }
 
 // Si hay suficiente cantidad reserva los recursos, sino encola el job
-int local_resorces_reserve(int job_id, int socket, char* resource_name, int amount) {
-    Resource* res = find_resource(resource_name);
-    if (res == NULL) -1;
+int local_resources_reserve(int job_id, int socket, char* resource_name, int amount) {
+    Resource* resource = find_resource(resource_name);
+    if (resource == NULL) -1;
 
-    if (res->available >= amount) {
-        res->available -= amount;
+    // Reserva los recursos
+    if (resource->available >= amount) {
+        resource->available -= amount;
         return 0;
     } else {
         // No hay recursos por el momento, encola el job
-        queue_push(&res->job_pendings, job_id, socket);
+        queue_push(&resource->job_pendings, job_id, socket);
         return 1;
     }
 }
 
-int local_resorces_release(char* resource_name, int amount) {
+// Recupera los recursos y atiende pedidos pendientes
+void local_resorces_release(reservation_t* table, int job_id, int source_fd, char* resource_name, int amount) {
+    if (!table) return;
+
     Resource* resource = find_resource(resource_name);
-    if (resource == NULL) {
-        return -1;
-    }
+    if (!resource) return;
 
-    resource->available += amount;
-    if (resource->available > resource->total_capacity) {
-        resource->available = resource->total_capacity;
-    }
+    reservation_t * reservation = reservation_manager_get(job_id);
+    if (!reservation) return;
 
-    if (!queue_is_empty(&resource->job_pendings)) {
-        int next_job_id = queue_top(&resource->job_pendings);
-        reservation_t *reservation = reservation_manager_get(next_job_id);
-        
-        if (resource->available >= reservation->amount) {
-            resource->available = resource->available - reservation->amount;            
-            // reservation->granted = 1;
-            return queue_pop(&resource->job_pendings); // Se atendió el siguiente pedido
-        }
-        else {
-            return -2; // No pudo atenderse el siguiente pedido
+    // Recupera los recursos utilizados
+    if (reservation->granted == 1) {
+        resource->available += amount;
+        if (resource->available > resource->total_capacity) {
+            resource->available = resource->total_capacity;
         }
     }
+    // No se utilizaron y se cancelo la espera
     else {
-        return 0; // No había trabajos pendientes
+        JobQueue aux;
+        queue_init(&aux);
+
+        // Elimina un elemento de la cola (no necesariamente el primero)
+        while (!queue_is_empty(&resource->job_pendings)) {
+            int current_front = resource->job_pendings.front;
+            int curr_id = resource->job_pendings.job_ids[current_front];
+            int curr_sock = resource->job_pendings.sockets[current_front];
+            
+            queue_pop(&resource->job_pendings);
+
+            if (curr_id == job_id && curr_sock == source_fd) {
+                continue;
+            }
+            queue_push(&aux, curr_id, curr_sock);
+        }
+
+        while (!queue_is_empty(&aux)) {
+            int current_front = aux.front;
+            queue_push(&resource->job_pendings, aux.job_ids[current_front], aux.sockets[current_front]);
+            queue_pop(&aux);
+        }
+    }
+
+    // Atiende los pedidos pendientes 
+    while (!queue_is_empty(&resource->job_pendings)) {
+        int next_job_id = queue_top(&resource->job_pendings);
+        reservation_t* next_res = reservation_manager_get(next_job_id);
+        
+        if (next_res == NULL) {
+            queue_pop(&resource->job_pendings);
+            continue;
+        }
+
+        if (resource->available >= next_res->amount) {
+            queue_pop(&resource->job_pendings);
+            resource->available -= next_res->amount;
+            reservation_set_granted(next_job_id, 1);
+        } else {
+            break;
+        }
     }
 }

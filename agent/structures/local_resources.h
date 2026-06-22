@@ -27,11 +27,10 @@ typedef struct {
 void local_resources_init(int num_resources, char* resource_names[], int capacities[]);
 
 // Si hay suficiente cantidad reserva los recursos, sino encola el job
-int local_resorces_reserve(int job_id, int socket, char* resource_name, int amount);
+int local_resources_reserve(int job_id, int socket, char* resource_name, int amount);
 
-// Recupera la cantidad de recursos que el job estaba usando y atiende pedidos pendientes
-// ¿En qué consiste atender los pedidos pendientes?
-int local_resorces_release(char* resource_name, int amount);
+// Recupera los recursos y atiende pedidos pendientes
+void local_resorces_release(reservation_t* table, int job_id, int source_fd, char* resource_name, int amount);
 
 // Destruye los recursos locales
 void local_resources_shutdown();

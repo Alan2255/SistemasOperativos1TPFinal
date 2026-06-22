@@ -82,3 +82,18 @@ const job_table_t* job_get(int job_id) {
 
     return (const job_table_t*)hash_get(table_job, key);
 }
+
+// Chequea si todos los requisitos del job están concedidos
+int job_check_granted(int job_id) {
+    
+    job_table_t* job = job_get(job_id);
+    if (!job) return -1;
+
+    int granted = 1;
+    for(int i = 0; i < job->nreqs; i++) {
+        if ((job->reqs[i]).granted) granted = 0;
+    }
+    
+    return granted;
+}
+

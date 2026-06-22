@@ -10,6 +10,7 @@ typedef struct {
     char dest_ip[INET_ADDRSTRLEN];
     char res[MAX_BYTES_NAME_RESOURCE];
     int amount; 
+    int granted;
 } job_req_t;
 
 // Job activo
@@ -35,5 +36,9 @@ bool job_release(int job_id);
 
 // Busca un job por ID y lo devuelve si existe
 const job_table_t* job_get(int job_id);
+
+// Chequea si todos los requisitos del job están concedidos
+int job_check_granted(int job_id);
+
 
 #endif
