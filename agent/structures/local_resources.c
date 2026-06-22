@@ -103,10 +103,10 @@ int local_resorces_reserve(int job_id, int socket, char* resource_name, int amou
     }
 }
 
-void local_resorces_release(char* resource_name, int amount) {
+int local_resorces_release(char* resource_name, int amount) {
     Resource* resource = find_resource(resource_name);
     if (resource == NULL) {
-        return;
+        return -1;
     }
 
     resource->available += amount;
@@ -119,9 +119,15 @@ void local_resorces_release(char* resource_name, int amount) {
         reservation_t *reservation = reservation_manager_get(next_job_id);
         
         if (resource->available >= reservation->amount) {
-            resource->available = resource->available - reservation->amount;
-            reservation->granted = 1;
-            queue_pop(&resource->job_pendings);
+            resource->available = resource->available - reservation->amount;            
+            // reservation->granted = 1;
+            return queue_pop(&resource->job_pendings); // Se atendió el siguiente pedido
         }
+        else {
+            return -2; // No pudo atenderse el siguiente pedido
+        }
+    }
+    else {
+        return 0; // No había trabajos pendientes
     }
 }
