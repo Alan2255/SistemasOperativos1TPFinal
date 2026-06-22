@@ -28,6 +28,11 @@
 #include "functions/functions.h"
 
 
+int epollfd;
+int sockudp;
+int scheduler_fd;
+FdInfo *scheduler_info;
+
 int main(int argc, char* argv[]) {
     /* Parseamos los recursos locales y las cantidades por 
     linea de comandos */
@@ -96,25 +101,25 @@ int main(int argc, char* argv[]) {
     if (timerfd_start(timerfd, ANNOUNCE_SEC) == -1)
         return -1;
 
-    /* Iniciamos el event loop . */ 
+    /* Iniciamos el event loop . */
     struct epoll_event events[MAX_EVENTS];
-    int nfds;
+    int nfds, n;
     for (;;) {
         nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
-        if (nfds == -1) 
+        if (nfds == -1)
             return -1;
         for (n = 0; n < nfds; ++n) {
             FdInfo* info = (FdInfo*)(events[n].data.ptr);
             switch (info->type) {
                 case FD_SCHEDULER:
-                    if (events[i].events & (EPOLLHUP | EPOLLERR)) {
+                    if (events[n].events & (EPOLLHUP | EPOLLERR)) {
                         epoll_ctl(epollfd, EPOLL_CTL_DEL, info->fd, NULL);
                         close(info->fd);
                         fd_info_destr(info);
                     }
-                    else if (events[i].events & EPOLLOUT)
+                    else if (events[n].events & EPOLLOUT)
                         handle_tcp_epollout(info);
-                    else if (events[i].events & EPOLLIN)
+                    else if (events[n].events & EPOLLIN)
                         handle_scheduler(info);
                     break;
 
@@ -123,11 +128,11 @@ int main(int argc, char* argv[]) {
                     break;
 
                 case FD_AGENT:
-                    if (events[i].events & (EPOLLHUP | EPOLLERR)) // si un agente cerro su conexion:
+                    if (events[n].events & (EPOLLHUP | EPOLLERR)) // si un agente cerro su conexion:
                         handle_agent_disconnect(info); //-----------
-                    else if (events[i].events & EPOLLOUT)
+                    else if (events[n].events & EPOLLOUT)
                         handle_tcp_epollout(info);
-                    else if (events[i].events & EPOLLIN)
+                    else if (events[n].events & EPOLLIN)
                         handle_agent_msg(info);
                     break;
 

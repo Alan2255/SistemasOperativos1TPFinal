@@ -15,7 +15,7 @@ typedef enum {
     FD_LISTEN_SCHEDULER,
 } fdtype;
 
-typedef struct {
+typedef struct FdInfo_s {
     int fd;
     fdtype type;
     void *data;

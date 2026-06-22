@@ -20,7 +20,7 @@ void handle_node_timer(FdInfo* info);
 void handle_announce_timer(FdInfo* info);
 
 /* Maneja un el intento de conexion del scheduler */
-void handle_listen_scheduler(FdInfo* info) 
+void handle_listen_scheduler(FdInfo* info);
 
 /* Maneja un el intento de conexion de un agente */
 void handle_agent_connect(FdInfo* info);

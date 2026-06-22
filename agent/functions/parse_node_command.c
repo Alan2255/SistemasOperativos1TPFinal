@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stdlib.h>
 #include "../agent.h"
 #include "../structures/fdinfo.h"
 #include "functions.h"

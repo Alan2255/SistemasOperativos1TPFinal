@@ -1,15 +1,21 @@
 #include <sys/epoll.h>
+#include <sys/timerfd.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <time.h>
+#include <arpa/inet.h>
 #include "../structures/fdinfo.h"
+#include "../structures/table_agent.h"
+#include "../structures/table_job.h"
+#include "../structures/table_reservation.h"
 #include "../agent.h"
 #include "functions.h"
 
 /* Maneja el evento EPOLLOUT de un socket tcp */
 int handle_tcp_epollout(FdInfo* info) {
-    int fd = info->fd
+    int fd = info->fd;
     fd_tcp_data* data = (fd_tcp_data*)(info->data);
 
     int n = send_msg_tcp(fd, data->buf_out, data->len_buf_out, 
@@ -94,7 +100,7 @@ void handle_agent_msg(FdInfo* info) {
     int len_buf = data->len_buf_in;
 
     /* Leemos lo que llego al socket. */
-    int n = read(fd, buf+len_buf, (TAM_BUF-len_buf)-1);
+    int n = read(info->fd, buf+len_buf, (TAM_BUF-len_buf)-1);
     buf[len_buf+n] = '\0';
 
   
@@ -118,11 +124,11 @@ void handle_agent_msg(FdInfo* info) {
 
         char reply[TAM_BUF];
         int len;
-        int nlen;
+        unsigned short nlen;
 
         if (strcmp(command_name, "RESERVE") == 0) {
             /* Intentamos reservar. */
-            switch (local_resources_reserve(job_id, data->fd, res, amount)) {
+            switch (local_resources_reserve(job_id, info->fd, res, amount)) {
                 case -1: // Resource/amount invalido
                     // Le respondemos DENIED <job_id>
                     len = sprintf(reply, "DENIED %d\n", job_id);
@@ -130,12 +136,12 @@ void handle_agent_msg(FdInfo* info) {
                     break;
 
                 case 1: // Cantidad no disponible (lo encola)
-                    reservation_add(job_id, info->fd, res, amount, 0);
+                    reservation_manager_add(job_id, info->fd, res, amount, 0);
                     break;
 
                 case 0: // Concedido
                     // Agregamos a la tabla de reservas locales
-                    reservation_add(job_id, info->fd, res, amount, 1);
+                    reservation_manager_add(job_id, info->fd, res, amount, 1);
 
                     // Le respondemos GRANTED <job_id>
                     len = sprintf(reply, "GRANTED %d\n", job_id);
@@ -145,37 +151,39 @@ void handle_agent_msg(FdInfo* info) {
         }
 
         else if (strcmp(command_name, "GRANTED") == 0) {
-            job_set_granted(job_id, 1);
+            char src_ip[INET_ADDRSTRLEN];
+            agent_manager_get_ip_by_fd(info->fd, src_ip);
+            job_set_granted(job_id, src_ip, 1);
             if (job_check_granted(job_id)) {
                 // Le avisamos al scheduler
                 len = sprintf(reply, "JOB_GRANTED %d", job_id);
                 nlen = htons(len);
-                if (send_msg_tcp(scheduler_fd, &nlen, 
-                                    NBYTES_PACKET_ERL, 
+                if (send_msg_tcp(scheduler_fd, (char*)&nlen,
+                                    NBYTES_PACKET_ERL,
                                     scheduler_info)
                     == -1)
-                    return -1;
+                    return;
                 if (send_msg_tcp(scheduler_fd, reply, len,
                                     scheduler_info) == -1)
-                    return -1;
+                    return;
             }
 
         }
         else if (strcmp(command_name, "RELEASE") == 0) {
-            local_resource_release(, job_id, info->fd, res, amount);
+            local_resources_release(job_id, info->fd, res, amount);
         }
         else if (strcmp(command_name, "DENIED") == 0) {
                 // Le avisamos al scheduler
                 len = sprintf(reply, "JOB_DENIED %d", job_id);
                 nlen = htons(len);
-                if (send_msg_tcp(scheduler_fd, &nlen, 
-                                    NBYTES_PACKET_ERL, 
+                if (send_msg_tcp(scheduler_fd, (char*)&nlen,
+                                    NBYTES_PACKET_ERL,
                                     scheduler_info)
                     == -1)
-                    return -1;
+                    return;
                 if (send_msg_tcp(scheduler_fd, reply, len,
                                     scheduler_info) == -1)
-                    return -1;
+                    return;
         }
     }
 }
@@ -220,9 +228,9 @@ void handle_announce(FdInfo* info) {
         // Agregamos el nodo a la tabla
         agent_manager_add(ip, port, res_count, resources, timerfd);
         
-        // Agregamos el timer a la instancia epoll 
-        FdInfo *info = epoll_add(timerfd, FD_NODE_TIMER, EPOLLIN);
-        strncpy(((fd_node_timer_data *)(info->data))->ip, ip,
+        // Agregamos el timer a la instancia epoll
+        FdInfo *timer_info = epoll_add(timerfd, FD_NODE_TIMER, EPOLLIN);
+        strncpy(((fd_node_timer_data *)(timer_info->data))->ip, ip,
                 INET_ADDRSTRLEN);
     }
     else {
@@ -275,7 +283,7 @@ int handle_scheduler(FdInfo *info) {
     char *delim1 = " ", *delim2=":";
     char *saveptr1, *saveptr2;
     char *job_id;
-    char *command = strtok_r(buf + NBYTES_PACKET_ERL, delim, &saveptr1); // command: JOB_REQUEST, JOB_RELEASE o JOB_STATUS
+    char *command = strtok_r(buf + NBYTES_PACKET_ERL, delim1, &saveptr1); // command: JOB_REQUEST, JOB_RELEASE o JOB_STATUS
 
     char request[TAM_BUF];
     unsigned short len;
@@ -285,7 +293,7 @@ int handle_scheduler(FdInfo *info) {
     // JOB_REQUEST [ @host:res:amount ... ]
     if (strncmp(command, "JOB_REQUEST", strlen("JOB_REQUEST")) == 0) {
 
-        job_id = strtok_r(NULL, delim, &saveptr1);
+        job_id = strtok_r(NULL, delim1, &saveptr1);
 
         // Gestionamos cada '@host:res:amount'
         job_req_t reqs[MAX_JOB_RQ];
@@ -299,18 +307,21 @@ int handle_scheduler(FdInfo *info) {
             char *amount = strtok_r(NULL, delim2, &saveptr2);
             
             // Guardamos el pedido para agregarlo a la tabla de jobs
-            reqs[nreqs].dest_ip = host;
-            reqs[nreqs].res = res;
-            reqs[nreqs].amount = amount;
+            strncpy(reqs[nreqs].dest_ip, host, INET_ADDRSTRLEN - 1);
+            reqs[nreqs].dest_ip[INET_ADDRSTRLEN - 1] = '\0';
+            strncpy(reqs[nreqs].res, res, MAX_BYTES_NAME_RESOURCE - 1);
+            reqs[nreqs].res[MAX_BYTES_NAME_RESOURCE - 1] = '\0';
+            reqs[nreqs].amount = atoi(amount);
+            reqs[nreqs].granted = 0;
 
             // Verificamos si el host (nodo) esta en la tabla de nodos
             if (agent_manager_get(host) == NULL) { 
                 // No se encuentra => no se puede mandar "RESERVE ..."
 
                 // Le avisamos al scheduler
-                len = sprintf(reply, "JOB_DENIED %d", job_id);
+                len = sprintf(reply, "JOB_DENIED %s", job_id);
                 nlen = htons(len);
-                if (send_msg_tcp(fd, &nlen, NBYTES_PACKET_ERL, info)
+                if (send_msg_tcp(fd, (char*)&nlen, NBYTES_PACKET_ERL, info)
                     == -1)
                     return -1;
                 if (send_msg_tcp(fd, reply, len, info) == -1)
@@ -332,7 +343,7 @@ int handle_scheduler(FdInfo *info) {
                     addr.sin_port = htons(port_host);
                     connect(sock_host, (struct sockaddr*)&addr, 
                             sizeof(addr));
-                    fdinfo_host = epoll_add(sock_host, FD_NODE, EPOLLIN 
+                    fdinfo_host = epoll_add(sock_host, FD_AGENT, EPOLLIN
                                             | EPOLLHUP | EPOLLERR);
                     agent_manager_set_fdinfo(host, fdinfo_host);
                 }
@@ -349,14 +360,14 @@ int handle_scheduler(FdInfo *info) {
 
     // JOB_RELEASE <job_id>
     else if (strncmp(command, "JOB_RELEASE", strlen("JOB_RELEASE")) == 0) {
-        job_id = strtok_r(NULL, delim, &saveptr1);
+        job_id = strtok_r(NULL, delim1, &saveptr1);
         const job_table_t* job = job_get(atoi(job_id));
 
         // Mandamos los "RELEASE" a los host que pedimos recursos.
         for (int i = 0; i < job->nreqs; i++) {
-            len = sprintf(request, "RELEASE %s %s %s\n", 
+            len = sprintf(request, "RELEASE %s %s %d\n",
                             job_id,
-                            (job->reqs[i]).res, 
+                            (job->reqs[i]).res,
                             (job->reqs[i]).amount);
             FdInfo* fdinfo = 
                 agent_manager_get_fdinfo((char *)(job->reqs[i]).dest_ip);

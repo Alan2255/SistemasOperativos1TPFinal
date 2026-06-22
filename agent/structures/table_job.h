@@ -40,5 +40,7 @@ const job_table_t* job_get(int job_id);
 // Chequea si todos los requisitos del job están concedidos
 int job_check_granted(int job_id);
 
+// Marca el pedido del job correspondiente a 'ip' como 'val'
+bool job_set_granted(int job_id, char* ip, int val);
 
 #endif

@@ -6,16 +6,6 @@
 
 static Hash *table_agent = NULL;
 
-// Función hash
-static unsigned long fun_hash(const char *str) {
-    unsigned long hash = 5381;
-    int c;
-    while ((c = (unsigned char)*str++)) {
-        hash = ((hash << 5) + hash) + c;
-    }
-    return hash;
-}
-
 // Crea la tabla de agentes
 void agent_manager_init() {
     if (table_agent == NULL) {
@@ -145,6 +135,21 @@ void agent_manager_delete(const char *ip) {
     }
 
     hash_remove(table_agent, ip);
+}
+
+// Busca un agente por el fd de su conexion y copia su IP en ip_out
+int agent_manager_get_ip_by_fd(int fd, char* ip_out) {
+    if (!table_agent || !ip_out) return -1;
+
+    for (int i = 0; i < table_agent->used; i++) {
+        if (table_agent->entries[i].key == NULL) continue;
+        AgentNode *agente = (AgentNode*)table_agent->entries[i].value;
+        if (agente->fdinfo != NULL && agente->fdinfo->fd == fd) {
+            strncpy(ip_out, agente->ip, INET_ADDRSTRLEN);
+            return 0;
+        }
+    }
+    return -1;
 }
 
 // Convierte la tabla de agentes en un string con las capacidades de los recursos

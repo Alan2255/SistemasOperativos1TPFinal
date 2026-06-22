@@ -4,11 +4,12 @@
 #define TAM_BUF 512
 #define PUERTO_UDP 12529
 #define PUERTO_TCP 8100
+#define PUERTO_TCP_SCHED 8101
 #define PORTSTRLEN 6
 #define MAX_EVENTS 10 // Maximos eventos para la instacia epoll
 #define MAX_PENDING_CONNECTIONS 3 // Maxima cantidad de 'connect' pendientes en el listen sock de nodos
 #define MAX_LEN_COMMAND_AGENT 7// Maxima longitud del nombre de un comando entre nodos (como RELEASE O GRANTED)
-#define MAX_LEN_REQUEST 
+#define MAX_LEN_REQUEST 512
 
 #define MAX_BYTES_NAME_RESOURCE 10// Maxima cantidad de bytes para el nombre de un recurso
 
@@ -27,9 +28,12 @@
 #define NBYTES_PACKET_ERL 2 // cantidad de bytes que indican el tamano de los paquetes enviados desde erlang
 
 
-int epollfd;
-int sockudp;            // Socket para envio/recibo de anuncios
-int scheduler_fd;       // Socket de conexion con el scheduler
-FdInfo *scheduler_info;
+struct FdInfo_s;
+typedef struct FdInfo_s FdInfo;
+
+extern int epollfd;
+extern int sockudp;            // Socket para envio/recibo de anuncios
+extern int scheduler_fd;       // Socket de conexion con el scheduler
+extern FdInfo *scheduler_info;
 
 #endif /* AGENT_H */

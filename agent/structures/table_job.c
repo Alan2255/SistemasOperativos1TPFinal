@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <arpa/inet.h>
 #include "hash.h"
 #include "table_job.h"
 
@@ -85,15 +86,28 @@ const job_table_t* job_get(int job_id) {
 
 // Chequea si todos los requisitos del job están concedidos
 int job_check_granted(int job_id) {
-    
-    job_table_t* job = job_get(job_id);
+
+    job_table_t* job = (job_table_t*)job_get(job_id);
     if (!job) return -1;
 
-    int granted = 1;
-    for(int i = 0; i < job->nreqs; i++) {
-        if ((job->reqs[i]).granted) granted = 0;
+    for (int i = 0; i < job->nreqs; i++) {
+        if (!job->reqs[i].granted) return 0;
     }
-    
-    return granted;
+
+    return 1;
+}
+
+// Marca el pedido del job correspondiente a 'ip' como 'val'
+bool job_set_granted(int job_id, char* ip, int val) {
+    job_table_t* job = (job_table_t*)job_get(job_id);
+    if (!job || !ip) return false;
+
+    for (int i = 0; i < job->nreqs; i++) {
+        if (strncmp(job->reqs[i].dest_ip, ip, INET_ADDRSTRLEN) == 0) {
+            job->reqs[i].granted = val;
+            return true;
+        }
+    }
+    return false;
 }
 

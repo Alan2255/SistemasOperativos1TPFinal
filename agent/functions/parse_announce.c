@@ -1,3 +1,5 @@
+#include <string.h>
+#include <stdlib.h>
 #include "../agent.h"
 #include "../structures/fdinfo.h"
 #include "../structures/table_reservation.h"
