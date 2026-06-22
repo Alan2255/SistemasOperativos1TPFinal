@@ -24,7 +24,7 @@ Sistema distribuido que gestiona recursos (CPUs, memoria, GPUs) en un clúster H
 ## Arquitectura
 
 Cada nodo tiene dos procesos:
-
+```
 ┌─────────────────────────────────────┐
 │              NODO                   │
 │                                     │
@@ -38,6 +38,7 @@ Cada nodo tiene dos procesos:
 └───────────────────────────┼─────────┘
                             │ TCP (red) + UDP broadcast
                      otros nodos
+```
 
 El agente C escucha en un único puerto TCP:
 - Conexiones desde `127.0.0.1` → interfaz local para Erlang
@@ -158,10 +159,11 @@ erl -noshell -s scheduler start 8200 &
 ### Descubrimiento UDP broadcast
 
 ```
-ANNOUNCE <IP> <puerto> <recurso>:<cantidad> [...]
+ANNOUNCE <puerto> <recurso>:<cantidad> [...]
 # Ejemplo:
-ANNOUNCE 192.168.1.10 8100 cpu:4 mem:8192 gpu:1
+ANNOUNCE 8100 cpu:4 mem:8192 gpu:1
 ```
+> **Nota:** La ip de cada nodo debera extraerse de recvfrom() para optener la informacion completa.
 
 - Se envía periódicamente (cada ~5 segundos) y al iniciar.
 - Un nodo se considera caído si no anuncia durante **15 segundos**.
@@ -228,7 +230,7 @@ Los diagramas se encuentran en `diagramas`:
 ![Caso 2](diagramas/caso2_job_denegado.drawio.png)
 
 ### Caso 3 — Deadlock y resolución
-> ⚠️ Pendiente hasta definir estrategia anti-deadlock con Rol 3.
+![Caso 3](diagramas/caso3_deadlock.drawio.png)
 
 ---
 
