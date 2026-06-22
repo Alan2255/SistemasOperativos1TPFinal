@@ -7,8 +7,11 @@
 obtener_cant_maxima_recursos([], ListMaximos) ->
     ListMaximos;
 
-%Obtiene la cantidad maxima de cada recurso entre todos los nodos disponibles, sirve para armar los jobs sin que se pase del maximo q puede obtener
-obtener_cant_maxima_recursos([Nodo | Resto], ListMaximos) -> %Recibe una lista donde cada elemento es un string con el nodo con sus datos y otra lista con 3 int
+%Obtiene la cantidad maxima de cada recurso entre todos los nodos disponibles, sirve para armar los jobs sin que se pase del maximo general que puede obtener
+% Recibe: [Nodo | Resto](Cada elemento es un string con el nodo y sus datos), ListMaximos(lista formada por 3 int)
+% Si no puede hacer pattern matching sobre el nodo es pq esta mal formado termina el programa pq no podra funcionar.
+% Retorna: ListMaximos(Lista de 3 int)
+obtener_cant_maxima_recursos([Nodo | Resto], ListMaximos) -> 
     List_recursos = string:tokens(Nodo, ":"), %devuelve una lista con cda elem del nodo, ej [host, puerto, cpu, cntcpu, mem, cntmem, etc
     [MaxCPU, MaxMEM, MaxGPU] = ListMaximos,
     case List_recursos of 
@@ -24,35 +27,43 @@ obtener_cant_maxima_recursos([Nodo | Resto], ListMaximos) -> %Recibe una lista d
             throw(badmatch) %Si mandaron datos erroneos desde C, terminamos el programa pq no podra funcionar
     end.
           
-%Split devuelve: primera lista con los primeros k elem y la segunda lista el resto ej (3, [a,b,c,d]) devolvera
-% [a,b,c] [d], como queres borrar el elemento N, haces N-1 para q el elem q qres borrar quede al inicio de la segunda lista
+%Split devuelve: primera lista con los primeros k elem y la segunda lista el resto ej lists:split(3, [a,b,c,d]) devolvera
+% [a,b,c] [d], como queres borrar el elemento N, haces N-1 para q el elem q queres borrar quede al inicio de la segunda lista
 % entonces haces {izq, [ _ | Der]} q ignora el primer elemento y desp unis toda la lista ignorando ese elem
-eliminar_indice(N, Lista) ->%N(int), Lista(Lista de 3 int)
+% Recibe: N(int), Lista(Lista de 3 int)
+% Retorna: La lista con el elemento eliminado
+eliminar_indice(N, Lista) ->
     {Izq, [_ | Der]} = lists:split(N - 1, Lista), 
     Izq ++ Der.  
-
-%Recibe un nodo string con los datos y retorna una lista con nodo CANTCPU CANT MEM CANTGPU       
+    
 % string:toekns ":" , devuelve una lista con cda elem del nodo, ej [host, puerto, cpu, cntcpu, mem, cntmem, 
+% Recibe: Nodo(string)
+% Retorna: Una tupla de la forma {Host, [CantCPU, CantMem, CantGPU}
 parsear_un_nodo(Nodo) -> %Nodo(string)
     [Host, _Puerto, "cpu", CantCPU, "mem", CantMEM, "gpu", CantGPU] = string:tokens(Nodo, ":"),%luego aplicamos Patter Matching
     {Host, [list_to_integer(CantCPU), list_to_integer(CantMEM), list_to_integer(CantGPU)]}.
 
-%aplica a cada nodo la funcion anterior, devuelve la lista con sublistas formadas por lo q devuelve la fun, para desp transformarlo en un mapa
-% entonces podemos acceder a nodo tal y a la cant de su cpu,mem, gpu
+%A cada nodo que es un string lo transforma en una tupla de la forma {Host, [CantCPU, CantMem, CantGPU}, de esta forma arma una lista con list comprehension
+% y finalmente transforma la lista en un mapa
+% Recibe: ListNodos(lista de strings)
+% Retorna: Un mapa de la forma {Nodo1 => [cantCPU, cantMEM, cantGPU], Nodo2 => [cantCPU, cantMEM, cantGPU], etc}
 parsear_lista_nodos(ListNodos) -> %ListNodos(list de strings)
     maps:from_list([parsear_un_nodo(Nodo) || Nodo <- ListNodos]).
 
 
+% Retorna: Lista de tuplas de la forma [{Nodo1, CantidadTomada}, {Nodo2, CantidadTomada2}, etc] si pudo repartir el recurso        
 repartir_entre_nodos(_Indice, 0, _Nodos) -> 
     [];
 
-%SI sigue habiendo cantidad distinta de 0 y ya recorrio toda la lista entonces no alcanzó entre todos los nodos
+% SI sigue habiendo cantidad distinta de 0 y ya recorrio toda la lista entonces no alcanzó entre todos los nodos
+% Retorna: {error, no alcanza} si no se puede repartir el recurso entre la cantidad q hay disponible entre los nodos
 repartir_entre_nodos(_Indice, _CantidadRestante, []) ->
     {error, no_alcanza};
 
 %Devuelve una lista con los nodos a los cuales pedir y cuanto le pide a cada uno
-repartir_entre_nodos(Indice, CantidadRestante, [{Host, Recursos} | Resto]) -> %Indice(int), CantidadRestante(int), Lista de tuplas
-    Disponible = lists:nth(Indice, Recursos),
+% Recibe: Indice(int), CantidadRestante(int), [{Host, Recursos} | Resto](lista de tuplas)
+repartir_entre_nodos(Indice, CantidadRestante, [{Host, Recursos} | Resto]) -> 
+    Disponible = lists:nth(Indice, Recursos), %Busca con el dice el recurso en el nodo actual para ver su cantidad disponible
     case Disponible of
         0 -> %SI no tiene nada dispoible nos fijamos en el prox nodo(resto llama al prox nodo y de vuelta se divide entre primer elemento y resto la lista)
             repartir_entre_nodos(Indice, CantidadRestante, Resto);
@@ -63,10 +74,10 @@ repartir_entre_nodos(Indice, CantidadRestante, [{Host, Recursos} | Resto]) -> %I
 
 %En el case busca en el mapa de nodos el primer nodo q tenga suficiente recurso segun el tipo de recurso pedido y su cant requerida
 %%Devuelve una lista con los nodos a los cuales pedir y cuanto le pide a cada uno
-%Si encuentra en 1 pasa lo de true y sino tiene q buscar entre mas nodos para completar
+%Si encuentra en 1 devuelve {value, {Nodo, Recursos}, retornamos Nodo y Cantidad y sino tiene q buscar entre mas nodos para completar
 % Recibe: %Recurso(string), Cantidad(int), MapNodos(map)
-% Retorna {error, no_alcanza} si no alcanzaron los nodos para la cantidad que requerias
-% Retorna Lista de tuplas de la forma [{Nodo1, CantidadTomada}, {Nodo2, CantidadTomada2}, etc]
+% Retorna: {error, no_alcanza} si no alcanzaron los nodos para la cantidad que requerias
+% Retorna: Lista de tuplas de la forma [{Nodo1, CantidadTomada}, {Nodo2, CantidadTomada2}, etc]
 elegir_nodos(Recurso, Cantidad, MapNodos) -> 
     Nodos = maps:to_list(MapNodos), %convierte mapa en una lista d tuplas EJ :[{Nodo1, [CPU, MEM, GPU]}, {Nodo2, [CPU, MEM, GPU]}] etc
     Indice = case Recurso of%convierte el recurso pedido en un indice de la lista de recursos
@@ -85,7 +96,7 @@ elegir_nodos(Recurso, Cantidad, MapNodos) ->
             repartir_entre_nodos(Indice, Cantidad, Nodos)%Si no lo encontro reetornamos error no hay nodo
     end.
     
-%Funcion que devuelve el msg armado con el job de cuanto recurso le pedis a cada nodo., luego solo faltaria agregarle la peticion y el JobID.
+%Funcion que devuelve el msg armado con el job de cuanto recurso le pedis a cada nodo, luego solo faltaria agregarle la peticion y el JobID.
 % Recibe: Recurso(string), Cant(string), MapNodos(map)
 % Retorna {error, no_alcanza} si no alcanzaron los nodos para la cantidad que requerias
 % Retorna string Ej: "@Nodo:Recurso:Cant @Nodo:Recurso:Cant"
@@ -102,8 +113,8 @@ armar_msg(Recurso, Cant, MapNodos) ->
 
 % Crea el msg final de JOB_REQUEST 
 % Recibe: JobID(string), Job(string),CantRecursos(int) MapNodos(mapa)
-% Retorna {error, no alcanza} en caso que no alcance la cantidad de nodos
-% Retorna Msg_final(string)
+% Retorna: {error, no alcanza} en caso que no alcance la cantidad de nodos
+% Retorna: Msg_final(string)
 handler_msgs(JobID, Job, CantRecursos, MapNodos) -> %JobID(string), Job(string),CantRecursos(int) MapNodos(mapa)
     List_recursos = string:tokens(Job, ":"),
     case CantRecursos of 
