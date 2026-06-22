@@ -1,6 +1,7 @@
 #ifndef LOCAL_RESOURCES_H
 #define LOCAL_RESOURCES_H
 
+#include <pthread.h>
 #include "../consts.h"
 #include "table_reservation.h"
 
@@ -19,6 +20,7 @@ typedef struct {
     int total_capacity;
     int available;
     JobQueue job_pendings; // La cola de jobs en espera para ESTE recurso específico
+    pthread_mutex_t mutex;
 } Resource;
 
 // --- API de los recursos locales ---

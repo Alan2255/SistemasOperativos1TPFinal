@@ -23,12 +23,29 @@ Hash* hash_create(void) {
 
     // Inicializar la tabla hash de índices con -1
     table->indices = malloc(table->capacity * sizeof(int));
+    if (!table->indices) {
+        free(table);
+        return NULL;
+    }
+
     for (int i = 0; i < table->capacity; i++) {
         table->indices[i] = -1;
     }
 
     // Inicializar el array compacto de entradas
     table->entries = malloc(table->capacity * sizeof(Entry));
+    if (!table->entries) {
+        free(table->indices);
+        free(table);
+        return NULL;
+    }
+
+    if (pthread_mutex_init(&table->mutex, NULL) != 0) {
+        free(table->entries);
+        free(table->indices);
+        free(table);
+        return NULL;
+    }
 
     return table;
 }
@@ -39,6 +56,8 @@ static void hash_resize(Hash *table) {
     int new_capacity = old_capacity * 2;
 
     int *new_indices = malloc(new_capacity * sizeof(int));
+    if (!new_indices) return; 
+
     for (int i = 0; i < new_capacity; i++) {
         new_indices[i] = -1;
     }
@@ -49,10 +68,10 @@ static void hash_resize(Hash *table) {
         if (table->entries[i].key == NULL) continue;
 
         unsigned long h = table->entries[i].hash;
-        size_t idx = h & (new_capacity - 1); // Máscara bitwise eficiente
+        size_t idx = h & (new_capacity - 1);
 
         while (new_indices[idx] != -1) {
-            idx = (idx + 1) & (new_capacity - 1); // Sondeo lineal
+            idx = (idx + 1) & (new_capacity - 1);
         }
         new_indices[idx] = i;
     }
@@ -61,12 +80,17 @@ static void hash_resize(Hash *table) {
     table->indices = new_indices;
     table->capacity = new_capacity;
     
-    table->entries = realloc(table->entries, table->capacity * sizeof(Entry));
+    Entry *new_entries = realloc(table->entries, table->capacity * sizeof(Entry));
+    if (new_entries) {
+        table->entries = new_entries;
+    }
 }
 
 // Agrega o modifica un elemento
 bool hash_set(Hash *table, const char *key, void *value) {
     if (!table || !key) return false;
+
+    pthread_mutex_lock(&table->mutex);
 
     unsigned long h = fun_hash(key);
     size_t idx = h & (table->capacity - 1);
@@ -77,6 +101,7 @@ bool hash_set(Hash *table, const char *key, void *value) {
         if (table->entries[entry_idx].key != NULL && strcmp(table->entries[entry_idx].key, key) == 0) {
             // Si ya existe, sobreescribimos el valor
             table->entries[entry_idx].value = value;
+            pthread_mutex_unlock(&table->mutex);
             return true;
         }
         idx = (idx + 1) & (table->capacity - 1);
@@ -101,12 +126,15 @@ bool hash_set(Hash *table, const char *key, void *value) {
     // Vincular el índice de la tabla hash con el array compacto
     table->indices[idx] = new_entry_idx;
     table->used++;
+
+    pthread_mutex_unlock(&table->mutex);
     return true;
 }
 
-// Busca el elemento mediante su key y lo devuelve si existe
-void* hash_get(const Hash *table, const char *key) {
+void* hash_get(Hash *table, const char *key) {
     if (!table || !key) return NULL;
+
+    pthread_mutex_lock(&table->mutex);
 
     unsigned long h = fun_hash(key);
     size_t idx = h & (table->capacity - 1);
@@ -114,17 +142,22 @@ void* hash_get(const Hash *table, const char *key) {
     while (table->indices[idx] != -1) {
         int entry_idx = table->indices[idx];
         if (table->entries[entry_idx].key != NULL && strcmp(table->entries[entry_idx].key, key) == 0) {
-            return table->entries[entry_idx].value;
+            void *value = table->entries[entry_idx].value;
+            pthread_mutex_unlock(&table->mutex);
+            return value;
         }
         idx = (idx + 1) & (table->capacity - 1);
     }
 
-    return NULL; // Clave no encontrada
+    pthread_mutex_unlock(&table->mutex);
+    return NULL;
 }
 
 // Borra un elemento de la tabla
 bool hash_remove(Hash *table, const char *key) {
     if (!table || !key) return false;
+
+    pthread_mutex_lock(&table->mutex);
 
     unsigned long h = fun_hash(key);
     size_t idx = h & (table->capacity - 1);
@@ -163,15 +196,18 @@ bool hash_remove(Hash *table, const char *key) {
                 if (debe_moverse) {
                     table->indices[vacio] = e_idx;
                     table->indices[siguiente] = -1;
-                    vacio = siguiente; // El hueco ahora se movió acá
+                    vacio = siguiente;
                 }
                 siguiente = (siguiente + 1) & (table->capacity - 1);
             }
 
+            pthread_mutex_unlock(&table->mutex);
             return true;
         }
         idx = (idx + 1) & (table->capacity - 1);
     }
+
+    pthread_mutex_unlock(&table->mutex);
     return false;
 }
 
@@ -181,10 +217,11 @@ void hash_destroy(Hash *table) {
 
     for (int i = 0; i < table->used; i++) {
         if (table->entries[i].key != NULL) {
-            free(table->entries[i].key); // Liberar los strdup de las claves
+            free(table->entries[i].key);
         }
     }
     free(table->entries);
     free(table->indices);
+    pthread_mutex_destroy(&table->mutex);
     free(table);
 }

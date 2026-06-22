@@ -78,11 +78,16 @@ void local_resources_init(int num_resources, char* resource_names[], int capacit
         resources[i].available = capacities[i];
         
         queue_init(&resources[i].job_pendings);
+
+        pthread_mutex_init(&resources[i].mutex, NULL);
     }
 }
 
 void local_resources_shutdown() {
     if (resources != NULL) {
+        for (int i = 0; i < resource_count; i++) {
+            pthread_mutex_destroy(&resources[i].mutex);
+        }
         free(resources);
         resources = NULL;
     }
@@ -94,13 +99,17 @@ int local_resources_reserve(int job_id, int socket, char* resource_name, int amo
     Resource* resource = find_resource(resource_name);
     if (resource == NULL) return -1;
 
+    pthread_mutex_lock(&resource->mutex);
+
     // Reserva los recursos
     if (resource->available >= amount) {
         resource->available -= amount;
+        pthread_mutex_unlock(&resource->mutex);
         return 0;
     } else {
         // No hay recursos por el momento, encola el job
         queue_push(&resource->job_pendings, job_id, socket);
+        pthread_mutex_unlock(&resource->mutex);
         return 1;
     }
 }
@@ -112,6 +121,8 @@ void local_resources_release( int job_id, int source_fd, char* resource_name, in
 
     reservation_t * reservation = reservation_manager_get(job_id);
     if (!reservation) return;
+
+    pthread_mutex_lock(&resource->mutex);
 
     // Recupera los recursos utilizados
     if (reservation->granted == 1) {
@@ -164,6 +175,8 @@ void local_resources_release( int job_id, int source_fd, char* resource_name, in
             break;
         }
     }
+
+    pthread_mutex_unlock(&resource->mutex);
 }
 
 // Devuelve un string con los recursos locales
@@ -174,7 +187,9 @@ void local_resources_to_str(char* buff) {
 
     char* ptr = buff;
     for (int i = 0; i < resource_count; i++) {
+        pthread_mutex_lock(&resources[i].mutex);
         int written = sprintf(ptr, "%s:%d ", resources[i].name, resources[i].total_capacity);
+        pthread_mutex_unlock(&resources[i].mutex);
         ptr += written;
     }
 }

@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdbool.h>
+#include <pthread.h>
 
 #define INITIAL_CAPACITY 16
 #define LOAD_FACTOR 0.75
@@ -20,6 +21,7 @@ typedef struct {
     Entry *entries;
     int capacity;
     int used;
+    pthread_mutex_t mutex;
 } Hash;
 
 // --- API de tabla hash ---
