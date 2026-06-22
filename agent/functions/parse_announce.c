@@ -1,15 +1,13 @@
-#include <string.h>
-#include <stdlib.h>
-
-#include "tokenize_str.h"
-#include "../structures/table_agent.h"
 #include "../agent.h"
+#include "../structures/fdinfo.h"
+#include "../structures/table_reservation.h"
+#include "functions.h"
 
-/* Parsea el anuncio "ANNOUNCE <puerto> <recursos>" (con hasta 3 recursos)
+/* Parsea el anuncio "ANNOUNCE <puerto> <recursos>"
 y copia los datos en los parametros pasados. */
 int parse_announce(char *msg, char *port, Resource *resources, int *res_count) {
-    char* tokens[5];
-    int count_tokens = tokenize_str(msg, " ", 5, tokens);
+    char* tokens[2 + MAX_RESOURCES_NODE];
+    int count_tokens = tokenize_str(msg, " ", 2 + MAX_RESOURCES_NODE, tokens);
 
     /* Parseamos el comando */
     if (count_tokens <= 2 || strcmp(tokens[0], "ANNOUNCE") != 0)

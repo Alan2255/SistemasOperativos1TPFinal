@@ -1,4 +1,4 @@
-/* ------ Estructura para manejar la instancia epoll ------ */
+/* ------ Estructura para manejar los eventos de epoll ------ */
 #ifndef FDINFO_H 
 #define FDINFO_H
 
@@ -8,9 +8,9 @@
 typedef enum {
     FD_SCHEDULER,
     FD_UDP,
-    FD_NODE,
+    FD_AGENT,
     FD_NODE_TIMER,
-    FD_ANNOUNCE_TIMER,
+    FD_SEND_ANNOUNCE_TIMER,
     FD_LISTEN_NODE,
     FD_LISTEN_SCHEDULER,
 } fdtype;
@@ -22,30 +22,16 @@ typedef struct {
 } FdInfo;
 
 typedef struct {
-    char buf[TAM_BUF];
-    int len_buf; 
-} fd_scheduler_data;
-
-typedef struct {
-    char buf[TAM_BUF];
-    int len_buf; 
-} fd_node_data;
+    char buf_in[TAM_BUF];
+    int len_buf_in;
+    char buf_out[TAM_BUF];
+    int len_buf_out; 
+} fd_tcp_data;
 
 typedef struct {
     char ip[INET_ADDRSTRLEN]; 
 } fd_node_timer_data;
 
-typedef struct {
-} fd_announce_timer_data;
-
-typedef struct {
-} fd_udp_data;
-
-typedef struct {
-} fd_listen_node_data;
-
-typedef struct {
-} fd_listen_scheduler_data;
 
 FdInfo *fd_info_create(int fd, fdtype type);
 

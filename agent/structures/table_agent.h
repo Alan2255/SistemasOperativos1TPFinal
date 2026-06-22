@@ -2,7 +2,7 @@
 #define AGENT_MANAGER_H
 
 #include "../agent.h"
-#include "../functions/fdinfo.h"
+#include "fdinfo.h"
 #include <arpa/inet.h>
 
 // Recurso

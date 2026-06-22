@@ -92,7 +92,7 @@ void local_resources_shutdown() {
 // Si hay suficiente cantidad reserva los recursos, sino encola el job
 int local_resources_reserve(int job_id, int socket, char* resource_name, int amount) {
     Resource* resource = find_resource(resource_name);
-    if (resource == NULL) -1;
+    if (resource == NULL) return -1;
 
     // Reserva los recursos
     if (resource->available >= amount) {

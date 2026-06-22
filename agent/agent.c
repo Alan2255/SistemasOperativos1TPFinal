@@ -5,15 +5,12 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <errno.h>
-#include "functions/tokenize_str.h"
-#include "functions/parse_announce.h"
-#include "agent.h"
-
 #include <sys/epoll.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/timerfd.h>
 #include <sys/socket.h>
 #include <sys/sysinfo.h>
 #include <sys/un.h>
@@ -21,177 +18,50 @@
 #include <netinet/ip.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#include "agent.h"
+#include "structures/fdinfo.h"
+#include "structures/hash.h"
+#include "structures/local_resources.h"
+#include "structures/table_agent.h"
+#include "structures/table_job.h"
+#include "structures/table_reservation.h"
+#include "functions/functions.h"
 
-/* Retorna la cantidad de CPUs. */
-int get_cpu_num() {
-    return sysconf(_SC_NPROCESSORS_CONF);
-}
 
-/* Retorna la cantidad de memoria en MB. */
-int get_mem_mb() {
-    struct sysinfo info;
-    sysinfo(&info);
-    return (info.totalram * info.mem_unit) / (1024 * 1024);
-}
+int main(int argc, char* argv[]) {
+    /* Parseamos los recursos locales y las cantidades por 
+    linea de comandos */
+    if (argc <= 1) {
+        printf("Uso: <int_n> <name_1> ... <name_n> <amount_1> ... <amount_n>\n");
+        return 1;
+    }
+    int num_resources = atoi(argv[1]);
 
-/* Retorna la estructura asociada al fd en epoll, o NULL en 
-caso de error. */
-FdInfo* epoll_add(int fd, fdtype type, int events) {
-    struct epoll_event ev;
-
-    /* Copiamos los eventos */
-    ev.events = events;
-
-    /* Creamos la estructura de datos segun el tipo de fd */
-    FdInfo *info = fd_info_create(fd, type);
-    if (info == NULL)
-        return NULL;
-    ev.data.ptr = info;
-
-    /* Agregamos a epoll */
-    // Si no se puede anadir eliminamos la estructura 
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev) == -1) {
-        fd_info_destr(info);
-        return NULL;
+    if (argc != 2 + (num_resources * 2)) {
+        printf("Error: cantidad incorrecta de argumentos \n");
+        printf("Uso: <int_n> <name_1> ... <name_n> <amount_1> ... <amount_n> \n");
+        return 1;
     }
 
-    return info;
-}
+    char** resource_names = malloc(sizeof(char*) * 
+                                            num_resources);
+    int* capacities = malloc(sizeof(int) * num_resources);
 
-int init_sock_udp() {
-    /* Creamos el socket */
-    int socket = socket(AF_INET, SOCK_DGRAM, 0);
-    if (socket == -1) 
-        return -1;
+    if (resource_names == NULL || capacities == NULL) {
+        free(resource_names);
+        free(capacities);
+        return 1;
+    }
 
-    /* Seteamos opciones de manipulacion necesarias para el 
-    socket */
-    int yes = 1;
-    if (setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, &yes, 
-                    sizeof(yes)) == -1)
-        return -1;
-    if (setsockopt(socket, SOL_SOCKET, SO_BROADCAST, &yes, 
-                    sizeof(yes)) == -1)
-        return -1;
+    for (int i = 0; i < num_resources; i++) {
+        resource_names[i] = argv[2 + i];
+        capacities[i] = atoi(argv[2 + num_resources + i]);
+    }
 
-    /* Bind a la direccion en la red y puerto PUERTO_UDP */
-    struct sockaddr_in addr;
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(PUERTO_UDP);
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    if (bind(socket, (struct sockaddr *)&addr, 
-                sizeof(addr)) == -1);
-        return -1;
-    
-    /* Agregamos a la instancia epoll */
-    if (epoll_add(socket, FD_UDP, EPOLLIN) == -1);
-        return -1;
-    
-    return 0;
-}
+    local_resources_init(num_resources, resource_names, capacities);
 
-int init_listen_sock_scheduler() {
-    /* Creamos el socket */
-    int socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (socket == -1) 
-        return -1;
-
-    /* Seteamos opciones de manipulacion necesarias para el 
-    socket */
-    int yes = 1;
-    if (setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, &yes, 
-                    sizeof(yes)) == -1)
-        return -1;
-
-    /* Bind a localhost y puerto PUERTO_TCP */
-    struct sockaddr_in addr;
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(PUERTO_TCP);
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    if (bind(socket, (struct sockaddr *)&addr, 
-                sizeof(addr)) == -1);
-        return -1;
-    
-    /* Lo ponemos en modo escucha */
-    if (listen(socket, 1) == -1)
-        return -1;
-
-    /* Agregamos a la instancia epoll */
-    if (epoll_add(socket, FD_UDP, EPOLLIN) == -1);
-        return -1;
-    
-    return 0;
-}
-
-int init_listen_sock_nodes() {
-    /* Creamos el socket */
-    int socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (socket == -1) 
-        return -1;
-
-    /* Seteamos opciones de manipulacion necesarias para el 
-    socket */
-    int yes = 1;
-    if (setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, &yes, 
-                    sizeof(yes)) == -1)
-        return -1;
-
-    /* Bind a la direccion en la red y puerto PUERTO_TCP */
-    struct sockaddr_in addr;
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(PUERTO_TCP);
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    if (bind(socket, (struct sockaddr *)&addr, 
-                sizeof(addr)) == -1);
-        return -1;
-    
-    /* Lo ponemos en modo escucha para nuevas conexiones*/
-    listen(socket, MAX_PENDING_CONNECTIONS);
-
-    /* Agregamos a la instancia epoll */
-    if (epoll_add(socket, FD_UDP, EPOLLIN) == -1);
-        return -1;
-    
-    return 0;
-}
-
-/* Envia el anuncio. */ // TERMINAR CUANDO ESTEN LOS RECURSOS LOCALES
-int send_announce(sockudp, ) {
-    char buf[TAM_BUF];
-    sprintf(buf, "ANNOUNCE %d cpu:%d mem:%d", PUERTO_UDP, 
-            get_cpu_num(), get_mem_mb()); // modificar
-
-    struct sockaddr_in dest;
-    dest.sin_family = AF_INET;
-    dest.sin_port = htons(PUERTO_UDP);
-    dest.sin_addr.s_addr = htonl(INADDR_BROADCAST);
-    sendto(sockudp, buf, strlen(buf), 0, (struct sockaddr*)&dest, sizeof(dest));
-}
-
-/* Inicia el timer (ya creado) con una cantidad en segundos */
-int timerfd_start(int timerfd, int sec) {
-    struct itimerspec ts;
-
-    ts.it_value.tv_sec = sec;
-    ts.it_value.tv_nsec = 0;
-
-    ts.it_interval.tv_sec = 0;
-    ts.it_interval.tv_nsec = 0;
-
-    if (timerfd_settime(timerfd, 0, &ts, NULL) == -1)
-        return -1;
-
-    return 0;
-}
-
-int epollfd;
-int scheduler_sock;     // Socket de conexion con el scheduler
-int sockudp;            // Socket para envio/recibo de anuncios
-
-int main() {
     /* Iniciamos la instancia epoll */
     epollfd = epoll_create1(0);
-
     if (epollfd == -1)
         return -1;
 
@@ -205,10 +75,12 @@ int main() {
         return -1;
 
     /* Iniciamos las tablas */
-    // COMPLETAR
+    agent_manager_init();
+    job_manager_init();
+    reservation_manager_init();
 
     /* Mandamos el anuncio y esperamos 2 segundos */ 
-    send_announce(sockudp);
+    send_announce();
     sleep(2);
 
     /* Seteamos un timer y lo agregamos a epoll para enviar el
@@ -217,8 +89,8 @@ int main() {
     if (timerfd == -1)
         return -1;
 
-    FdInfo* timerfd_info = epoll_add(timerfd, FD_ANNOUNCE_TIMER,
-                                        EPOLLIN);
+    FdInfo* timerfd_info = epoll_add(timerfd, 
+                                FD_SEND_ANNOUNCE_TIMER, EPOLLIN);
     if (timerfd_info == NULL)
         return -1;
     if (timerfd_start(timerfd, ANNOUNCE_SEC) == -1)
@@ -235,35 +107,44 @@ int main() {
             FdInfo* info = (FdInfo*)(events[n].data.ptr);
             switch (info->type) {
                 case FD_SCHEDULER:
-                    if (events[i].events & (EPOLLHUP | EPOLLERR)) { // si el scheduler corto la conexion:
+                    if (events[i].events & (EPOLLHUP | EPOLLERR)) {
                         epoll_ctl(epollfd, EPOLL_CTL_DEL, info->fd, NULL);
                         close(info->fd);
                         fd_info_destr(info);
                     }
-                    else 
+                    else if (events[i].events & EPOLLOUT)
+                        handle_tcp_epollout(info);
+                    else if (events[i].events & EPOLLIN)
                         handle_scheduler(info);
                     break;
+
                 case FD_UDP:
                     handle_announce(info);
                     break;
-                case FD_NODE:
+
+                case FD_AGENT:
                     if (events[i].events & (EPOLLHUP | EPOLLERR)) // si un agente cerro su conexion:
-                        handle_node_disconnect(info);
-                    else
-                        handle_node(info);
+                        handle_agent_disconnect(info); //-----------
+                    else if (events[i].events & EPOLLOUT)
+                        handle_tcp_epollout(info);
+                    else if (events[i].events & EPOLLIN)
+                        handle_agent_msg(info);
                     break;
+
                 case FD_NODE_TIMER:
                     handle_node_timer(info);
                     break;
-                case FD_ANNOUNCE_TIMER:
+                    
+                case FD_SEND_ANNOUNCE_TIMER:
                     handle_announce_timer(info);
                     break;
+
                 case FD_LISTEN_NODE:
-                    struct_size = sizeof(fd_listen_node_data);
+                    handle_agent_connect(info);
                     break;
+
                 case FD_LISTEN_SCHEDULER:
-                    struct_size = sizeof(fd_listen_scheduler_data);
-                    break;
+                    handle_listen_scheduler(info);
             }
         }
     }

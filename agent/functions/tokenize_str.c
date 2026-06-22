@@ -1,8 +1,11 @@
 #include <string.h>
-#include "tokenize_str.h"
+#include "../agent.h"
+#include "../structures/fdinfo.h"
+#include "functions.h"
 
-int tokenize_str(char *str, char *delim, int max_tokens, char **tokens)
-{
+
+/* Separa el string en tokens y guarda una referencia a cada uno en 'tokens' */
+int tokenize_str(char *str, char *delim, int max_tokens, char **tokens) {
     int i = 0;
 
     if (str == NULL || delim == NULL || tokens == NULL || max_tokens <= 0)
