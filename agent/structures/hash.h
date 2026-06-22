@@ -36,7 +36,7 @@ void hash_destroy(Hash *dict);
 bool hash_set(Hash *dict, const char *key, void *value);
 
 // Busca el elemento mediante su key y lo devuelve si existe
-void* hash_get(const Hash *dict, const char *key);
+void* hash_get(Hash *dict, const char *key);
 
 // Borra un elemento de la tabla
 bool hash_remove(Hash *table, const char *key);
