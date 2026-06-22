@@ -53,10 +53,10 @@ int init_listen_sock_scheduler() {
                     sizeof(yes)) == -1)
         return -1;
 
-    /* Bind a localhost y puerto PUERTO_TCP_SCHED */
+    /* Bind a localhost y puerto 'puerto_tcp' */
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(PUERTO_TCP_SCHED);
+    addr.sin_port = htons(puerto_tcp);
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     if (bind(sockfd, (struct sockaddr *)&addr,
                 sizeof(addr)) == -1)
@@ -87,10 +87,10 @@ int init_listen_sock_nodes() {
                     sizeof(yes)) == -1)
         return -1;
 
-    /* Bind a la direccion en la red y puerto PUERTO_TCP */
+    /* Bind a la direccion en la red y puerto siguiente a 'puerto_tcp' */
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(PUERTO_TCP);
+    addr.sin_port = htons(puerto_tcp+1);
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
     if (bind(sockfd, (struct sockaddr *)&addr,
                 sizeof(addr)) == -1)

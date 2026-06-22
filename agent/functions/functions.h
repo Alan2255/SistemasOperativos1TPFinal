@@ -5,6 +5,7 @@
 #include "../structures/fdinfo.h"
 #include "../structures/local_resources.h"
 
+extern uint16_t puerto_tcp;
 extern int epollfd;
 extern int sockudp;            // Socket para envio/recibo de anuncios
 extern int scheduler_fd;       // Socket de conexion con el scheduler
