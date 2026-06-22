@@ -1,46 +1,83 @@
 #!/bin/bash
-
-# 1. Limpieza automática: explica que esto mata todo si cancelas con Ctrl+C
+# Limpieza automática
 trap "kill 0" EXIT
 
-# 2. Configuración: variables fáciles de entender.
+# ============================================
+# CONFIGURACIÓN
+# ============================================
 PUERTO_A=8100
 PUERTO_B=8200
+CPU_A=2
+RAM_A=8192
+GPU_A=0
+CPU_B=2
+RAM_B=4096
+GPU_B=1
 BINARIO=./agente
-LOG_A="erl_A.log"
-LOG_B="erl_B.log"
+LocalHost=127.0.0.1
+LIMIT_INTENTOS=6
 
-# 3. Compilación: el "make" es básico
-echo "Compilando..."
+# ============================================
+# PASO 1: Compilación
+# ============================================
+echo "Compilando C y Erlang..."
 make clean && make
 [ -f $BINARIO ] || { echo "Error: Binario no encontrado"; exit 1; }
 
-# 4. Levantar Agentes: estructura clara
-$BINARIO $PUERTO_A > agent_A.log &
-$BINARIO $PUERTO_B > agent_B.log &
-sleep 2 # Damos tiempo a que arranquen
+# ============================================
+# PASO 2: Levantar Agentes C
+# ============================================
+echo "Levantando agentes C..."
+$BINARIO $PUERTO_A $CPU_A $RAM_A $GPU_A > agent_A.log 2>&1 &
+AGENT_A_PID=$!
 
-# 5. Pipes: mkfifo es el "caño" para hablar con Erlang
-mkfifo pipe_A pipe_B
+$BINARIO $PUERTO_B $CPU_B $RAM_B $GPU_B > agent_B.log 2>&1 &
+AGENT_B_PID=$!
 
-# 6. Lanzar Erlang: explicá que '-noshell' es para correr sin consola interactiva
-erl -noshell -s main server manual 0 < pipe_A > $LOG_A 2>&1 &
-erl -noshell -s main server manual 0 < pipe_B > $LOG_B 2>&1 &
 sleep 2
 
-# 7. Comandos: inyección simple
-echo "c(main)." > pipe_A
-echo "c(main)." > pipe_B
-echo "main:server(manual, 10)." > pipe_A
-echo "main:server(manual, 10)." > pipe_B
+# ============================================
+# PASO 3: Preparar archivos de jobs
+# ============================================
+cat > jobs_A.txt << 'EOF'
+{"job1", "cpu:2:gpu:1", 2}.
+EOF
 
-# 8. Test de Deadlock: la parte que vas a defender
-echo "Inyectando trabajos para forzar deadlock..."
-echo 'pid_scheduler_job ! {"job1", "cpu:2:gpu:1", 2}.' > pipe_A
-echo 'pid_scheduler_job ! {"job2", "gpu:1:cpu:2", 2}.' > pipe_B
+cat > jobs_B.txt << 'EOF'
+{"job2", "gpu:1:cpu:2", 2}.
+EOF
 
+# ============================================
+# PASO 4: Lanzar Schedulers (con -pa scheduler/)
+# ============================================
+echo "Lanzando schedulers Erlang..."
+erl -noshell -pa scheduler/ -s main server manual 2 $PUERTO_A jobs_A.txt > erlang_A.log 2>&1 &
+ERLANG_A_PID=$!
+
+erl -noshell -pa scheduler/ -s main server manual 2 $PUERTO_B jobs_B.txt > erlang_B.log 2>&1 &
+ERLANG_B_PID=$!
+
+echo "Esperando timeout (aprox 6s)..."
 sleep 6
 
-# 9. Verificación: acá usás grep para buscar el error esperado
-echo "Resultado del test:"
-grep "POSIBLE DEADLOCK" $LOG_A $LOG_B && echo "Test OK: Deadlock detectado" || echo "Test fallido"
+# ============================================
+# PASO 5: Verificación
+# ============================================
+echo ""
+echo "=== RESULTADO DEL TEST ==="
+if grep -q "POSIBLE DEADLOCK" erlang_A.log || grep -q "POSIBLE DEADLOCK" erlang_B.log; then
+    echo "✓ Deadlock detectado y resuelto mediante timeout"
+    echo "Test: OK"
+else
+    echo "✗ No se detectó deadlock"
+    echo "Test: FALLIDO"
+fi
+
+echo ""
+echo "Logs disponibles:"
+echo "  - agent_A.log / agent_B.log"
+echo "  - erlang_A.log / erlang_B.log"
+
+# ============================================
+# LIMPIEZA (automática con trap)
+# ============================================
