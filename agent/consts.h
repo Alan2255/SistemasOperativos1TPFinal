@@ -1,5 +1,5 @@
-#ifndef AGENT_H
-#define AGENT_H
+#ifndef CONSTS_H
+#define CONSTS_H
 
 #define TAM_BUF 512
 #define PUERTO_UDP 12529
@@ -27,13 +27,4 @@
 
 #define NBYTES_PACKET_ERL 2 // cantidad de bytes que indican el tamano de los paquetes enviados desde erlang
 
-
-struct FdInfo_s;
-typedef struct FdInfo_s FdInfo;
-
-extern int epollfd;
-extern int sockudp;            // Socket para envio/recibo de anuncios
-extern int scheduler_fd;       // Socket de conexion con el scheduler
-extern FdInfo *scheduler_info;
-
-#endif /* AGENT_H */
+#endif /* CONSTS_H */

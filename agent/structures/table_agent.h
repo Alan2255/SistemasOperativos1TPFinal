@@ -1,7 +1,7 @@
 #ifndef AGENT_MANAGER_H
 #define AGENT_MANAGER_H
 
-#include "../agent.h"
+#include "../consts.h"
 #include "fdinfo.h"
 #include "local_resources.h"
 #include <arpa/inet.h>

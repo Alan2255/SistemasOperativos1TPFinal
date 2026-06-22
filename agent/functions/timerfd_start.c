@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <sys/timerfd.h>
-#include "../agent.h"
+#include "../consts.h"
 #include "../structures/fdinfo.h"
 #include "functions.h"
 

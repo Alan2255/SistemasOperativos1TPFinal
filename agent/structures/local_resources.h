@@ -1,7 +1,7 @@
 #ifndef LOCAL_RESOURCES_H
 #define LOCAL_RESOURCES_H
 
-#include "../agent.h"
+#include "../consts.h"
 #include "table_reservation.h"
 
 // Cola de trabajos pendientes

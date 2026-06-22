@@ -1,8 +1,8 @@
-#include "../agent.h"
-#include "../structures/fdinfo.h"
-#include <sys/epoll.h>
 #include <stdio.h>
-
+#include <sys/epoll.h>
+#include "../consts.h"
+#include "../structures/fdinfo.h"
+#include "functions.h"
 
 /* Retorna la estructura asociada al fd en epoll, o NULL en 
 caso de error. */

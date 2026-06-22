@@ -2,7 +2,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "functions.h"
-#include "../agent.h"
+#include "../consts.h"
 #include "../structures/fdinfo.h"
 
 /* Manda un mensaje un socket tcp, en caso de error retorna -1

@@ -2,7 +2,7 @@
 #define RESERVATION_MANAGER_H
 
 #include <stdbool.h>
-#include "../agent.h"
+#include "../consts.h"
 
 // Job reservado
 typedef struct {

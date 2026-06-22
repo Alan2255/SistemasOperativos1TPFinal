@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 #include <arpa/inet.h>
-#include "../agent.h"
+#include "../consts.h"
 
 // Request de un recurso
 typedef struct { 

@@ -3,7 +3,7 @@
 #define FDINFO_H
 
 #include <arpa/inet.h>
-#include "../agent.h"
+#include "../consts.h"
 
 typedef enum {
     FD_SCHEDULER,
@@ -15,7 +15,7 @@ typedef enum {
     FD_LISTEN_SCHEDULER,
 } fdtype;
 
-typedef struct FdInfo_s {
+typedef struct {
     int fd;
     fdtype type;
     void *data;

@@ -1,8 +1,7 @@
 #include <string.h>
-#include "../agent.h"
+#include "../consts.h"
 #include "../structures/fdinfo.h"
 #include "functions.h"
-
 
 /* Separa el string en tokens y guarda una referencia a cada uno en 'tokens' */
 int tokenize_str(char *str, char *delim, int max_tokens, char **tokens) {

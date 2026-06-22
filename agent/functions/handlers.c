@@ -10,7 +10,7 @@
 #include "../structures/table_agent.h"
 #include "../structures/table_job.h"
 #include "../structures/table_reservation.h"
-#include "../agent.h"
+#include "../consts.h"
 #include "functions.h"
 
 /* Maneja el evento EPOLLOUT de un socket tcp */

@@ -1,9 +1,14 @@
 #ifndef FUNCTIONS_H
 #define FUNCTIONS_H
 
-#include "../agent.h"
+#include "../consts.h"
 #include "../structures/fdinfo.h"
 #include "../structures/local_resources.h"
+
+extern int epollfd;
+extern int sockudp;            // Socket para envio/recibo de anuncios
+extern int scheduler_fd;       // Socket de conexion con el scheduler
+extern FdInfo *scheduler_info;
 
 /* Retorna la estructura asociada al fd en epoll, o NULL en 
 caso de error. */

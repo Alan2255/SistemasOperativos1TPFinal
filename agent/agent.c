@@ -18,7 +18,7 @@
 #include <netinet/ip.h>
 #include <netdb.h>
 #include <arpa/inet.h>
-#include "agent.h"
+#include "consts.h"
 #include "structures/fdinfo.h"
 #include "structures/hash.h"
 #include "structures/local_resources.h"

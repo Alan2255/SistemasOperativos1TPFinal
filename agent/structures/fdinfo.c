@@ -1,6 +1,5 @@
 #include <stdlib.h>
 #include "fdinfo.h"
-#include "../agent.h"
 
 FdInfo *fd_info_create(int fd, fdtype type) {
     FdInfo *ret = malloc(sizeof(FdInfo));
