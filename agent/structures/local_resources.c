@@ -105,9 +105,7 @@ int local_resources_reserve(int job_id, int socket, char* resource_name, int amo
 }
 
 // Recupera los recursos y atiende pedidos pendientes
-void local_resorces_release(reservation_t* table, int job_id, int source_fd, char* resource_name, int amount) {
-    if (!table) return;
-
+void local_resorces_release( int job_id, int source_fd, char* resource_name, int amount) {
     Resource* resource = find_resource(resource_name);
     if (!resource) return;
 

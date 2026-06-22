@@ -30,7 +30,7 @@ void local_resources_init(int num_resources, char* resource_names[], int capacit
 int local_resources_reserve(int job_id, int socket, char* resource_name, int amount);
 
 // Recupera los recursos y atiende pedidos pendientes
-void local_resorces_release(reservation_t* table, int job_id, int source_fd, char* resource_name, int amount);
+void local_resorces_release(int job_id, int source_fd, char* resource_name, int amount);
 
 // Destruye los recursos locales
 void local_resources_shutdown();
