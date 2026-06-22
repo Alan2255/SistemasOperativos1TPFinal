@@ -33,4 +33,7 @@ bool reservation_manager_set_granted(int job_id, int granted);
 // Busca una reserva por ID 
 reservation_t* reservation_manager_get(int job_id);
 
+// Elimina todas las reservas asociadas a un socket (src_fd)
+void reservation_manager_release_by_socket(int src_fd);
+
 #endif

@@ -104,14 +104,10 @@ void reservation_manager_release_by_socket(int src_fd) {
 
     // Recorremos el arreglo interno de la tabla hash
     for (int i = 0; i < table_reservation->used; i++) {
-        reservation_t reserva = (reservation_t)table_reservation->entries[i].value;
+        reservation_t* reserva = (reservation_t*)table_reservation->entries[i].value;
         
         // Si la entrada tiene una reserva válida y coincide con el socket
         if (reserva != NULL && reserva->src_fd == src_fd) {
-            
-            // Liberamos la memoria de la estructura de la reserva
-            free(reserva);
-            table_reservation->entries[i].value = NULL; 
             
             // Generamos la clave para eliminar la entrada de la tabla hash correctamente
             char key[32];
@@ -119,7 +115,10 @@ void reservation_manager_release_by_socket(int src_fd) {
             
             // Eliminamos la reserva de la tabla 
             hash_remove(table_reservation, key);
-            
+
+            // Liberamos la memoria de la estructura de la reserva
+            free(reserva);
+            table_reservation->entries[i].value = NULL; 
         }
     }
 }
