@@ -36,6 +36,6 @@ void local_resources_release(int job_id, int source_fd, char* resource_name, int
 void local_resources_shutdown();
 
 // Devuelve un string con los recursos locales
-void local_resources_to_str();
+void local_resources_to_str(char* buff);
 
 #endif
