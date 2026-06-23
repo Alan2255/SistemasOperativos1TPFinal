@@ -7,6 +7,23 @@ Sistema distribuido que gestiona recursos (CPUs, memoria, GPUs) en un clúster H
 
 ---
 
+## Estructura del Proyecto
+
+```text
+/proyecto
+├── test_deadlock.sh       # Script de pruebas automatizadas
+├── /agente
+│   ├── Makefile           # Compilación del agente C
+│   └── (código .c)        # Implementación en C
+├── main.erl               # Lógica del scheduler Erlang
+└── aux.erl                # Funciones auxiliares Erlang
+
+```
+
+---
+
+---
+
 ## Tabla de contenidos
 
 1. [Arquitectura](#arquitectura)
@@ -74,7 +91,6 @@ Cada nodo tiene dos procesos que se comunican localmente:
 
 ```bash
 cd agente
-make clean  # (nota: actualmente sin regla clean — ignorar error)
 make
 cd ..
 ```
@@ -97,6 +113,8 @@ Genera archivos `aux.beam` y `main.beam` en la carpeta raíz.
 
 **1. Arrancar el agente C:**
 
+Desde la raíz del proyecto, ejecuta el agente:
+
 ```bash
 ./agente/agent <PUERTO> <N_RECURSOS> <nombre1> <nombre2> ... <cantidad1> <cantidad2> ...
 
@@ -109,7 +127,7 @@ Al arrancar, el agente C:
 2. Espera 2 segundos para recibir anuncios de otros nodos.
 3. Comienza a procesar peticiones.
 
-**2. Arrancar el planificador Erlang (otra terminal):**
+**2. Arrancar el planificador Erlang (otra terminal desde la raíz del proyecto):**
 
 ```bash
 erl -noshell -pa . -eval "main:server(manual, 2, 8100)" -s init stop
@@ -122,7 +140,7 @@ El planificador se conecta al agente C local en `localhost:8100`.
 Para una prueba automatizada, usar el script:
 
 ```bash
-bash test_deadlock_3.sh
+bash test_deadlock.sh
 ```
 
 ---
@@ -139,8 +157,6 @@ bash test_deadlock_3.sh
 | `RELEASE <job_id> <recurso> <cantidad>` | A → B | Liberar un recurso |
 
 ### Interfaz local Erlang ↔ Agente C (TCP localhost con packet length prefix)
-
-**Formato:** Erlang envía/recibe con protocolo `{packet, 2}` (2 bytes de length prefix en big-endian).
 
 **Comandos de Erlang al agente C:**
 
@@ -217,11 +233,10 @@ Cada job tiene un **timeout de 5 segundos**. Si el job no completa en ese tiempo
 
 ## Script de prueba
 
-El script `test_deadlock_3.sh` realiza una prueba automatizada:
+El script `test_deadlock.sh` realiza una prueba automatizada:
 
 ```bash
-chmod +x test_deadlock_3.sh
-bash test_deadlock_3.sh
+bash test_deadlock.sh
 ```
 
 **Qué hace:**
@@ -299,74 +314,7 @@ Ver logs:
 tail -f scheduler.log
 ```
 
-### Pruebas manuales con netcat
 
-```bash
-# Levantar agente
-./agente/agent 8100 3 cpu mem gpu 2 8192 0
-
-# En otra terminal, simular cliente
-echo -e "GET_NODES\n" | nc localhost 8100
-```
-
-> **Nota:** netcat no entiende el protocolo `{packet, 2}` de Erlang. Para testing real, usar Erlang o cliente C.
-
----
-
-## Problemas conocidos y notas técnicas
-
-### 1. Makefile del agente C
-- **Problema:** No tiene regla `clean`
-- **Impacto:** El script intenta `make clean` pero falla (no crítico, continúa)
-- **Solución:** Alan puede agregar `clean:` al Makefile
-
-### 2. GET_NODES no responde
-- **Problema:** Agente C no responde a petición `GET_NODES` desde Erlang
-- **Impacto:** `inicializar_sistema` en aux.erl queda bloqueado
-- **Workaround:** En test_deadlock_3.sh se mockea este paso
-- **A investigar:** Alan debe revisar manejo de `GET_NODES` en agent.c
-
-### 3. Comunicación TCP/UDP
-- El protocolo local (Erlang → Agente C) usa `{packet, 2}` (2 bytes length prefix)
-- El protocolo inter-agentes (TCP) usa ASCII terminado en `\n`
-- El protocolo UDP broadcast también usa ASCII
-
-### 4. Cambios en código Erlang (testing)
-
-Para que el script funcione, se realizaron los siguientes cambios en `aux.erl`:
-
-**Línea 301:** Cambio de módulo para spawn
-```erlang
-% Antes:
-Pid_scheduler_job = spawn_link(?MODULE, scheduler_jobs, [...])
-
-% Después (en aux.erl, debe referenciar main.erl):
-Pid_scheduler_job = spawn_link(main, scheduler_jobs, [JobTimeout, Pid_wait_jobs, Puerto])
-```
-
-**Línea 280:** Agregado timeouts a conexiones TCP
-```erlang
-% Antes:
-gen_tcp:connect("localhost", Puerto, [binary, {packet, 2}])
-gen_tcp:recv(Socket, 0)
-
-% Después:
-gen_tcp:connect("localhost", Puerto, [binary, {packet, 2}], 5000)
-gen_tcp:recv(Socket, 0, 5000)
-```
-
-**Nueva función (línea ~307):** Helper para testing
-```erlang
-% Espera a que pid_scheduler_job esté registrado (para testing)
-wait_scheduler_ready(0) -> exit(timeout);
-wait_scheduler_ready(N) ->
-    case whereis(pid_scheduler_job) of
-        undefined -> timer:sleep(100), wait_scheduler_ready(N-1);
-        _ -> ok
-    end.
-```
-
----
 
 ## Compilación desde cero
 
@@ -384,7 +332,7 @@ cd ..
 erlc aux.erl main.erl
 
 # Prueba
-bash test_deadlock_3.sh
+bash test_deadlock.sh
 ```
 
 ---
