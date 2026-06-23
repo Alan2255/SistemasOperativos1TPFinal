@@ -9,7 +9,7 @@
 /* Inicia el socket udp para la recepcion de anuncios */
 int init_sock_udp() {
     /* Creamos el socket */
-    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    int sockfd = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, 0);
     if (sockfd == -1)
         return -1;
 
@@ -33,7 +33,7 @@ int init_sock_udp() {
         return -1;
 
     /* Agregamos a la instancia epoll */
-    if (epoll_add(sockfd, FD_UDP, EPOLLIN) == NULL)
+    if (epoll_add(sockfd, FD_UDP, EPOLLIN | EPOLLET | EPOLLONESHOT) == NULL)
         return -1;
 
     return sockfd;
@@ -67,7 +67,7 @@ int init_listen_sock_scheduler() {
         return -1;
 
     /* Agregamos a la instancia epoll */
-    if (epoll_add(sockfd, FD_LISTEN_SCHEDULER, EPOLLIN) == NULL)
+    if (epoll_add(sockfd, FD_LISTEN_SCHEDULER, EPOLLIN | EPOLLET) == NULL)
         return -1;
 
     return sockfd;
@@ -76,7 +76,7 @@ int init_listen_sock_scheduler() {
 /* Inicia el socket de escucha para conexiones con otros agentes */
 int init_listen_sock_nodes() {
     /* Creamos el socket */
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    int sockfd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
     if (sockfd == -1)
         return -1;
 
@@ -101,7 +101,7 @@ int init_listen_sock_nodes() {
         return -1;
 
     /* Agregamos a la instancia epoll */
-    if (epoll_add(sockfd, FD_LISTEN_NODE, EPOLLIN) == NULL)
+    if (epoll_add(sockfd, FD_LISTEN_NODE, EPOLLIN | EPOLLET | EPOLLONESHOT) == NULL)
         return -1;
 
     return sockfd;

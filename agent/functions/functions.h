@@ -1,6 +1,8 @@
 #ifndef FUNCTIONS_H
 #define FUNCTIONS_H
 
+#include <sys/epoll.h>
+#include <pthread.h>
 #include "../consts.h"
 #include "../structures/fdinfo.h"
 #include "../structures/local_resources.h"
@@ -14,6 +16,9 @@ extern FdInfo *scheduler_info;
 /* Retorna la estructura asociada al fd en epoll, o NULL en 
 caso de error. */
 FdInfo* epoll_add(int fd, fdtype type, int events);
+
+/* Event loop de la instancia epoll (para correr en cada thread)*/
+void* event_loop(void*);
 
 /* Maneja el evento EPOLLOUT de un socket tcp */
 int handle_tcp_epollout(FdInfo* info);

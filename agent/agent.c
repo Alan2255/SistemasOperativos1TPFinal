@@ -93,69 +93,22 @@ int main(int argc, char* argv[]) {
 
     /* Seteamos un timer y lo agregamos a epoll para enviar el
     proximo */
-    int timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
+    int timerfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
     if (timerfd == -1)
         return -1;
 
-    FdInfo* timerfd_info = epoll_add(timerfd, 
-                                FD_SEND_ANNOUNCE_TIMER, EPOLLIN);
+    FdInfo* timerfd_info = epoll_add(timerfd, FD_SEND_ANNOUNCE_TIMER, 
+                                    EPOLLIN | EPOLLET | EPOLLONESHOT);
     if (timerfd_info == NULL)
         return -1;
     if (timerfd_start(timerfd, ANNOUNCE_SEC) == -1)
         return -1;
 
-    /* Iniciamos el event loop . */
-    struct epoll_event events[MAX_EVENTS];
-    int nfds, n;
-    for (;;) {
-        nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
-        if (nfds == -1)
-            return -1;
-        for (n = 0; n < nfds; ++n) {
-            FdInfo* info = (FdInfo*)(events[n].data.ptr);
-            switch (info->type) {
-                case FD_SCHEDULER:
-                    if (events[n].events & (EPOLLHUP | EPOLLERR)) {
-                        epoll_ctl(epollfd, EPOLL_CTL_DEL, info->fd, NULL);
-                        close(info->fd);
-                        fd_info_destr(info);
-                    }
-                    else if (events[n].events & EPOLLOUT)
-                        handle_tcp_epollout(info);
-                    else if (events[n].events & EPOLLIN)
-                        handle_scheduler(info);
-                    break;
 
-                case FD_UDP:
-                    handle_announce(info);
-                    break;
-
-                case FD_AGENT:
-                    if (events[n].events & (EPOLLHUP | EPOLLERR)) // si un agente cerro su conexion:
-                        handle_agent_disconnect(info); //-----------
-                    else if (events[n].events & EPOLLOUT)
-                        handle_tcp_epollout(info);
-                    else if (events[n].events & EPOLLIN)
-                        handle_agent_msg(info);
-                    break;
-
-                case FD_NODE_TIMER:
-                    handle_node_timer(info);
-                    break;
-                    
-                case FD_SEND_ANNOUNCE_TIMER:
-                    handle_announce_timer(info);
-                    break;
-
-                case FD_LISTEN_NODE:
-                    handle_agent_connect(info);
-                    break;
-
-                case FD_LISTEN_SCHEDULER:
-                    handle_listen_scheduler(info);
-            }
-        }
-    }
+    /* Iniciamos los threads */
+    pthread_t threads[N_THREADS];
+    for (int i = 0; i < N_THREADS; i++)
+        pthread_create(&threads[i], NULL, event_loop, NULL);
 }
 
 
