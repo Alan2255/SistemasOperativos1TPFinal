@@ -309,7 +309,15 @@ supervisor_scheduler_jobs(JobTimeout, Pid_wait_jobs, Puerto) ->% JobTimeout(Time
 %Retorna: ListMaximos(lista de 3 int, formada por la suma de la cantidad de ese recurso entre todos los nodos disponibles, donde el orden de las cantidades es CPU, MEM, GPU.)
 inicializar_sistema(N, Puerto) -> 
     {ok, BinList} = get_nodes_or_exit(Puerto),
-    List_nodos_separados = string:split(binary_to_list(BinList), ";", all),% devuelve lista donde cada elem es un nodo con sus atributos
+    ListStr = binary_to_list(BinList),
+    %Sacamos "Nodes "
+    ListSinPrefijo = case ListStr of
+        "NODES " ++ Resto -> 
+            Resto; %Si recibe NODES lo ignora
+        _ -> 
+            ListStr %sino lo deja igual
+    end,
+    List_nodos_separados = string:split(binary_to_list(ListSinPrefijo), ";", all),% devuelve lista donde cada elem es un nodo con sus atributos
     ListMaximos = obtener_cant_maxima_recursos(List_nodos_separados, [0,0,0]),
     JobTimeout = 5000,
     %TABLA DE PENDIENTES: son los jobs q estan pendientes(fueron mandados y tdv no tienen rta), ets sierve para almacenar datos de forma compartida entre procesos
