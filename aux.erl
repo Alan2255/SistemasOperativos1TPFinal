@@ -199,7 +199,7 @@ armar_peticiones(JobID, Job, CantRecursos, MapNodos) -> %%JobID(string), Job(str
 conectar_y_obtener_nodos(Puerto) ->
     case gen_tcp:connect("localhost", Puerto, [binary, {packet, 2}]) of 
         {ok, Socket} ->
-            gen_tcp:send(Socket, <<"GET_NODES\n">>), %consulto con el agente C, me respondera con una lista de nodos vivos en formato de texto, EJ: NODES 192.168.1.10:8100:cpu:4:mem:8192:gpu:1 
+            gen_tcp:send(Socket, <<"GET_NODES">>), %consulto con el agente C, me respondera con una lista de nodos vivos en formato de texto, EJ: NODES 192.168.1.10:8100:cpu:4:mem:8192:gpu:1 
             {ok, BinList} = gen_tcp:recv(Socket, 0),%por mas q diga lista lor recibo como un binario q luego transformo a string
 
             List_nodos_separados = string:split(binary_to_list(BinList), ";", all),% devuelve lista donde cada elem es un nodo con sus atributos
@@ -285,7 +285,7 @@ get_nodes_or_exit(Puerto)-> %packet, 2 lo q hace es q en los primeros 2 bytes po
                     {ok, BinList};
                 {error, Reason} ->
                     gen_tcp:close(Socket),
-                    exit({error_al_conectar, Reason}) %por mas q diga lista lor recibo como un binario q luego transformo a string
+                    exit({error_al_recibir_get_nodes, Reason}) %por mas q diga lista lor recibo como un binario q luego transformo a string
             end;
         {error, Reason} ->
             exit({error_al_conectar, Reason})
