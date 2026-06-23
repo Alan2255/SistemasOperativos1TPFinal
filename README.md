@@ -44,9 +44,9 @@ Sistema distribuido que gestiona recursos (CPUs, memoria, GPUs) en un clúster H
 Cada nodo tiene dos procesos que se comunican localmente:
 
 ```
-┌─────────────────────────────────────┐
-│              NODO                   │
-│                                     │
+┌────────────────────────────────────┐
+│              NODO                  │
+│                                    │
 │  ┌─────────────────────────────┐   │
 │  │  Planificador (Erlang)      │   │
 │  │  - Generación de jobs       │   │
@@ -81,7 +81,7 @@ Cada nodo tiene dos procesos que se comunican localmente:
 | Erlang/OTP  | 25+           | para planificador |
 | Linux       | kernel 2.6+   | `epoll` es Linux-only |
 
-**⚠️ Nota importante:** El sistema usa `epoll`, por lo que **solo funciona en Linux**. No es compatible con macOS ni Windows de forma nativa.
+** Nota importante:** El sistema usa `epoll`, por lo que **solo funciona en Linux**. No es compatible con macOS ni Windows de forma nativa.
 
 ---
 
@@ -217,7 +217,7 @@ Cada job tiene un **timeout de 5 segundos**. Si el job no completa en ese tiempo
 2. Agente B concede 1 GPU a Job2 ✓
 3. Job1 espera GPU de B (bloqueado por Job2)
 4. Job2 espera CPUs de A (bloqueado por Job1)
-5. **RESULTADO:** Interbloqueo indefinido ❌
+5. **RESULTADO:** Interbloqueo indefinido 
 
 **Con la estrategia (EVITADO/RESUELTO):**
 1. Ambos jobs aplican el orden global (CPU antes que GPU)
@@ -227,7 +227,7 @@ Cada job tiene un **timeout de 5 segundos**. Si el job no completa en ese tiempo
    - `JOB_RELEASE` libera los 2 CPUs en A
    - Log registra `"POSIBLE DEADLOCK"`
 3. Job2 ahora obtiene las CPUs de A
-4. **RESULTADO:** Sistema recupera normalidad ✅
+4. **RESULTADO:** Sistema recupera normalidad 
 
 ---
 
@@ -246,14 +246,14 @@ bash test_deadlock.sh
 3. Inyecta Job1 y Job2 simultáneamente para provocar deadlock
 4. Espera 7 segundos (incluye timeout de 5s de los jobs)
 5. Busca `"POSIBLE DEADLOCK"` en `scheduler.log`
-6. Imprime resultado: `✅ TEST: OK` o `❌ TEST: FALLIDO`
+6. Imprime resultado: `TEST: OK` o `TEST: FALLIDO`
 7. Limpia procesos al finalizar con `trap`
 
-**Salida esperada si funciona:**
+**Salida esperada si funciona (representacion):**
 
 ```
 ╔════════════════════════════════════╗
-║       ✅ TEST: OK                  ║
+║        TEST: OK                    ║
 ╚════════════════════════════════════╝
 ```
 
@@ -336,41 +336,6 @@ bash test_deadlock.sh
 ```
 
 ---
-
-## Comandos útiles
-
-```bash
-# Ver procesos del sistema
-ps aux | grep -E "agent|erl"
-
-# Verificar puertos abiertos
-netstat -tlnp | grep 810
-
-# Buscar deadlocks en logs
-grep "POSIBLE DEADLOCK" scheduler.log
-
-# Ejecutar test con salida en vivo
-bash test_deadlock_3.sh 2>&1 | tee test_output.log
-
-# Limpiar archivos compilados
-rm -f *.beam erl_crash.dump scheduler.log erlang_*.log agent_*.log
-```
-
----
-
-## Estado del proyecto
-
-- ✅ Compilación C y Erlang funcional
-- ✅ Comunicación local Erlang ↔ Agente C
-- ✅ Protocolo inter-agentes definido
-- ✅ Estrategia anti-deadlock implementada (timeout-based)
-- ✅ Script de prueba automatizado
-- ✅ Diagramas de secuencia (3 casos)
-- ⚠️ GET_NODES: requiere investigación en agent.c
-- 📋 Documentación: completa
-
----
-
  
 **Proyecto:** R-322 Sistemas Operativos I - TP Final  
 **Equipo:** Dallas Cañari Benites - Valentino Perticarari - Alan Hergenreder - Benjamín Alomar 
