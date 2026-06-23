@@ -284,10 +284,10 @@ Bloqueo circular → Timeout de 5s → `JOB_RELEASE` → Recuperación
 
 | Rol | Responsable | Responsabilidad | Tecnología |
 |-----|-------------|-----------------|------------|
-| Rol 1 | Alan | Servidor C con epoll, sockets TCP/UDP, buffers, manejo de conexiones | C, epoll, TCP, UDP |
-| Rol 2 | — | Estructuras de recursos, colas, asignación/liberación, tabla de jobs | C, estructuras de datos |
+| Rol 1 | Dallas | Servidor C con epoll, sockets TCP/UDP, buffers, manejo de conexiones | C, epoll, TCP, UDP |
+| Rol 2 | Alan | Estructuras de recursos, colas, asignación/liberación, tabla de jobs | C, estructuras de datos |
 | Rol 3 | Valen | Planificador Erlang, generación de jobs, anti-deadlock, timeouts | Erlang |
-| Rol 4 | Bauti | Scripts de prueba, documentación, diagramas, testing, integración | Bash, documentación |
+| Rol 4 | Benja | Scripts de prueba, documentación, diagramas, testing, integración | Bash, documentación |
 
 ---
 
@@ -371,6 +371,6 @@ rm -f *.beam erl_crash.dump scheduler.log erlang_*.log agent_*.log
 
 ---
 
-**Última actualización:** Junio 2026  
+ 
 **Proyecto:** R-322 Sistemas Operativos I - TP Final  
-**Equipo:** Alan, Valen, Benja, Dallas
+**Equipo:** Dallas Cañari Benites - Valentino Perticarari - Alan Hergenreder - Benjamín Alomar 
