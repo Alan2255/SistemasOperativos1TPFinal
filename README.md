@@ -425,4 +425,4 @@ rm -f *.beam erl_crash.dump scheduler.log erlang_*.log agent_*.log
 
 **Última actualización:** Junio 2026  
 **Proyecto:** R-322 Sistemas Operativos I - TP Final  
-**Equipo:** Alan, Valen, Bauti
+**Equipo:** Alan, Valen, Benja, Dallas
