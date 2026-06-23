@@ -277,7 +277,7 @@ wait_jobs(N) -> %N(int)
 get_nodes_or_exit(Puerto)-> %packet, 2 lo q hace es q en los primeros 2 bytes pone la longitud y en lo qsigue el msg
     case  gen_tcp:connect("localhost", Puerto, [binary, {packet, 2}]) of %envio para conectarme al puerto 8100, si es exitosa devuelve ok socket
         {ok, Socket} ->
-            gen_tcp:send(Socket, <<"GET_NODES\n">>), %consulto con el agente C respondera con una lista con los nodos disponoinbiles, necesito esto para armar listMax para generar los jobs
+            gen_tcp:send(Socket, <<"GET_NODES">>), %consulto con el agente C respondera con una lista con los nodos disponoinbiles, necesito esto para armar listMax para generar los jobs
             % EJ: NODES 192.168.1.10:8100:cpu:4:mem:8192:gpu:1 ; 192.168.1.11:8101:cpu:2:mem:4096
             case gen_tcp:recv(Socket, 0) of
                 {ok, BinList} -> 
@@ -311,7 +311,7 @@ inicializar_sistema(N, Puerto) ->
     {ok, BinList} = get_nodes_or_exit(Puerto),
     List_nodos_separados = string:split(binary_to_list(BinList), ";", all),% devuelve lista donde cada elem es un nodo con sus atributos
     ListMaximos = obtener_cant_maxima_recursos(List_nodos_separados, [0,0,0]),
-    JobTimeout = 5,
+    JobTimeout = 5000,
     %TABLA DE PENDIENTES: son los jobs q estan pendientes(fueron mandados y tdv no tienen rta), ets sierve para almacenar datos de forma compartida entre procesos
     ets:new(pendientes, [named_table, public, set]), %named table q la podemos llamar por su nombre, public cualq proceso puede acceder, set para q no repita
     Pid_wait_jobs = spawn_link(?MODULE, wait_jobs, [N]), %Creamos wait jobs para q cliente recien termine cuando terminen de ejecutarse todos los jobs y no teremine antes
