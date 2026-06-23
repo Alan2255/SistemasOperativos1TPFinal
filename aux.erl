@@ -300,7 +300,7 @@ get_nodes_or_exit(Puerto)-> %packet, 2 lo q hace es q en los primeros 2 bytes po
 %No retorna nada, vive siempre mientras el sistema este corriendo
 supervisor_scheduler_jobs(JobTimeout, Pid_wait_jobs, Puerto) ->% JobTimeout(Timer en milisegundos), Pid_wait_jobs(Pid)
     process_flag(trap_exit, true), %hace que la señales de salida q provengan de procesos linkeades no maten automaticamente al proceso sino que se transf en msg que llegan al mailbox
-    Pid_scheduler_job = spawn_link(?MODULE, scheduler_jobs, [JobTimeout, Pid_wait_jobs, Puerto]), %queda esperando jobs para enviar al sv en C
+    Pid_scheduler_job = spawn_link(main, scheduler_jobs, [JobTimeout, Pid_wait_jobs, Puerto]), %queda esperando jobs para enviar al sv en C
     register(pid_scheduler_job, Pid_scheduler_job), % lo registramos aca entonce ssi se cae lo volvemos a levantar y a registrar
     receive 
     {'EXIT', _From, _Reason} ->
