@@ -72,7 +72,7 @@ int main(int argc, char* argv[]) {
         resource_names[i] = argv[3 + i];
         capacities[i] = atoi(argv[3 + num_resources + i]);
     }
-
+    
     local_resources_init(num_resources, resource_names, capacities);
 
     /* Iniciamos la instancia epoll */
