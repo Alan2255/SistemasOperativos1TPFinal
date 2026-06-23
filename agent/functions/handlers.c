@@ -15,6 +15,7 @@
 #include "../structures/table_reservation.h"
 #include "../consts.h"
 #include "functions.h"
+#include <stdbool.h>
 
 /* Maneja el evento EPOLLOUT de un socket tcp */
 int handle_tcp_epollout(FdInfo* info) {
@@ -67,7 +68,7 @@ void handle_announce_timer(FdInfo* info) {
     /* Lo agregamos nuevamente a epoll */
     struct epoll_event ev;
     ev.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
-    ev.data.ptr = info->data;
+    ev.data.ptr = info;
     epoll_ctl(epollfd, EPOLL_CTL_MOD, info->fd, &ev);
 
     /* Iniciamos el time */
@@ -119,7 +120,7 @@ void handle_agent_connect(FdInfo* info) {
     /* Volvemos a agregar el fd a la instancia epoll */
     struct epoll_event ev;
     ev.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
-    ev.data.ptr = info->data;
+    ev.data.ptr = info;
     epoll_ctl(epollfd, EPOLL_CTL_MOD, info->fd, &ev);
 }
 
@@ -161,6 +162,7 @@ void handle_agent_msg(FdInfo* info) {
             unsigned short nlen;
     
             if (strcmp(command_name, "RESERVE") == 0) {
+                printf("Me pedi a mi mismo el trabajo\n");
                 /* Intentamos reservar. */
                 switch (local_resources_reserve(job_id, info->fd, res, amount)) {
                     case -1: // Resource/amount invalido
@@ -231,7 +233,7 @@ void handle_agent_msg(FdInfo* info) {
     struct epoll_event ev;
     ev.events = EPOLLIN | EPOLLHUP | EPOLLERR |
                 EPOLLET | EPOLLONESHOT;
-    ev.data.ptr = info->data;
+    ev.data.ptr = info;
     epoll_ctl(epollfd, EPOLL_CTL_MOD, info->fd, &ev);
 }
 
@@ -245,11 +247,12 @@ void handle_agent_disconnect(FdInfo* info) {
 /* Maneja la recepcion de un anuncion es el socket udp */
 void handle_announce(FdInfo* info) {
 
-    printf("Alguien se anuncio \n");
     int fd = info->fd;
     char buf[TAM_BUF];
     int len_buf;
     
+    printf("Evento de agente\n");
+
     char ip[INET_ADDRSTRLEN];
     struct sockaddr_in src;
     socklen_t sa_len = sizeof(src);
@@ -273,6 +276,8 @@ void handle_announce(FdInfo* info) {
         if (parse_announce(buf, port, resources, &res_count) == -1)
             return;
     
+            printf("puerto: %s\n",port);
+
         /* Agregamos o actualizamos el nodo en la tabla */
         int timerfd = agent_manager_get_timerfd(ip);
         if (timerfd < 0) { // Si el nodo no se encuentra en la tabla
@@ -297,10 +302,9 @@ void handle_announce(FdInfo* info) {
 
     struct epoll_event ev;
     ev.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
-    ev.data.ptr = info->data;
+    ev.data.ptr = info;
     epoll_ctl(epollfd, EPOLL_CTL_MOD, info->fd, &ev);
 }
-
 
 /* Maneja la recepcion de un mensaje del scheduler */
 int handle_scheduler(FdInfo *info) {
@@ -409,7 +413,7 @@ int handle_scheduler(FdInfo *info) {
                         send_msg_tcp(sock_host, request, len, info);
                     }
                 }
-                job_add(atoi(job_id), nreqs, reqs);
+                bool result = job_add(atoi(job_id), nreqs, reqs);
             }
         
             // JOB_RELEASE <job_id>
@@ -458,7 +462,7 @@ int handle_scheduler(FdInfo *info) {
     struct epoll_event ev;
     ev.events = EPOLLIN | EPOLLHUP | EPOLLERR |
                 EPOLLET | EPOLLONESHOT;
-    ev.data.ptr = info->data;
+    ev.data.ptr = info;
     epoll_ctl(epollfd, EPOLL_CTL_MOD, info->fd, &ev);
 
     return 0;

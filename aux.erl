@@ -1,5 +1,5 @@
 -module(aux).
--export([eliminar_indice/2, inicializar_sistema/2, handler_job/6, wait_jobs/1, supervisor_scheduler_jobs/3]).
+-export([eliminar_indice/2, inicializar_sistema/2, handler_job/6, wait_jobs/1, supervisor_scheduler_jobs/4]).
 
 %========= Funciones AUXILIARES  ===============$
 %MapNodos : mapa donde key es el nodo y value lista con 3 enteros, donde cada entero representa en orden la cantidad de CPU, MEM, GPU
@@ -79,14 +79,14 @@ repartir_entre_nodos(Indice, CantidadRestante, [{Host, Recursos} | Resto]) ->
 % Retorna: {error, no_alcanza} si no alcanzaron los nodos para la cantidad que requerias
 % Retorna: Lista de tuplas de la forma [{Nodo1, CantidadTomada}, {Nodo2, CantidadTomada2}, etc]
 elegir_nodos(Recurso, Cantidad, MapNodos) -> 
-    Nodos = maps:to_list(MapNodos), %convierte mapa en una lista d tuplas EJ :[{Nodo1, [CPU, MEM, GPU]}, {Nodo2, [CPU, MEM, GPU]}] etc
-    Indice = case Recurso of%convierte el recurso pedido en un indice de la lista de recursos
+    Nodos = maps:to_list(MapNodos), % convierte mapa en una lista d tuplas EJ :[{Nodo1, [CPU, MEM, GPU]}, {Nodo2, [CPU, MEM, GPU]}] etc
+    Indice = case Recurso of % convierte el recurso pedido en un indice de la lista de recursos
         "cpu" -> 1;
         "mem" -> 2;
         "gpu" -> 3
     end,
-    case lists:search(fun({_Host, Recursos}) ->%Busca el primer nodo q cumpla la condicion de q la cant del recurso del nodo sea mayorigual a la q necesitamos
-        lists:nth(Indice, Recursos) >= list_to_integer(Cantidad) 
+    case lists:search(fun({_Host, Recursos}) -> %Busca el primer nodo q cumpla la condicion de q la cant del recurso del nodo sea mayorigual a la q necesitamos
+        lists:nth(Indice, Recursos) >= Cantidad
     end,
      Nodos) of  %Si lo encontro devuelve {value, {Nodo, Recursos}, retornamos Nodo y Cantidad 
         {value, {Nodo, _}} -> 
@@ -226,7 +226,7 @@ procesar_respuesta(JobID, Job, CantRecursos, Socket, Msg_RELEASE, JobTimeout, Pi
     
         {error, timeout} -> %aca fue job timeout, recibiste un recurso(o no) pero esperaste mucho para otro(o para tu primer) entonces dio error timeout la fun tcp rcv
             borrarPendiente_and_registrarLog(JobID, Job, "POSIBLE DEADLOCK"),
-            gen_tcp:send(Socket, <<Msg_RELEASE>>), %mandamos release devolviendo ese job
+            gen_tcp:send(Socket, list_to_binary(Msg_RELEASE)), %mandamos release devolviendo ese job
             pid_scheduler_job ! {JobID, Job, CantRecursos}; %lo mandamos d vuelta al buzon del receive para q desp intente d nuevo
             %Aca no mandamos ok al wait jobs pq todavia no termino este job
             
@@ -237,7 +237,7 @@ procesar_respuesta(JobID, Job, CantRecursos, Socket, Msg_RELEASE, JobTimeout, Pi
                     io:format("Simulando trabajo. . .~n"),
                     timer:sleep(2000),
                     io:format("Trabajo finalizado!.~n"),
-                    gen_tcp:send(Socket, <<Msg_RELEASE>>),%mandamos release devolviendo ese job
+                    gen_tcp:send(Socket, list_to_binary(Msg_RELEASE)),%mandamos release devolviendo ese job
                     Pid_wait_jobs ! {ok}; %avisamos q el job termino
 
                 "JOB_DENIED " ++ _Rest -> %Nos cancelaron el job, lo borramos de la tabla de pendientes, registramos el log y avisamos que termino el job
@@ -257,7 +257,7 @@ handler_job(JobID, Job, CantRecursos, JobTimeout, Pid_wait_jobs, Puerto) ->
                     gen_tcp:close(Socket);
 
                 {Msg_REQUEST, Msg_RELEASE} -> %Si pudimos armarlas, las enviamos al agente e insertamos en la lista de pendientes el job
-                    gen_tcp:send(Socket, <<Msg_REQUEST>>),
+                    gen_tcp:send(Socket, list_to_binary(Msg_REQUEST)),
                     ets:insert(pendientes, {JobID, Job}),
                     procesar_respuesta(JobID, Job, CantRecursos, Socket, Msg_RELEASE, JobTimeout, Pid_wait_jobs),%Recibe la respuesta de la peticion enviada y maneja que hacer en cada caso.
                     gen_tcp:close(Socket)%Cerramos el socket
@@ -299,17 +299,18 @@ get_nodes_or_exit(Puerto)-> %packet, 2 lo q hace es q en los primeros 2 bytes po
             exit({error_al_conectar, Reason})
     end.
 
-%Crea el proceso scheduler_jobs, si este muere captura el error y se encarga de volver a levantarlo.
-%Recibe: JobTimeout(int en milisegundos), Pid_wait_jobs(Pid), Puerto(int)
-%No retorna nada, vive siempre mientras el sistema este corriendo
-supervisor_scheduler_jobs(JobTimeout, Pid_wait_jobs, Puerto) ->% JobTimeout(Timer en milisegundos), Pid_wait_jobs(Pid)
-    process_flag(trap_exit, true), %hace que la señales de salida q provengan de procesos linkeades no maten automaticamente al proceso sino que se transf en msg que llegan al mailbox
-    Pid_scheduler_job = spawn_link(main, scheduler_jobs, [JobTimeout, Pid_wait_jobs, Puerto]), %queda esperando jobs para enviar al sv en C
-    register(pid_scheduler_job, Pid_scheduler_job), % lo registramos aca entonce ssi se cae lo volvemos a levantar y a registrar
+% Crea el proceso scheduler_jobs, si este muere captura el error y se encarga de volver a levantarlo.
+% Recibe: JobTimeout(int en milisegundos), Pid_wait_jobs(Pid), Puerto(int)
+% No retorna nada, vive siempre mientras el sistema este corriendo
+supervisor_scheduler_jobs(JobTimeout, Pid_wait_jobs, Puerto, Pid_caller) ->
+    process_flag(trap_exit, true),
+    Pid_scheduler_job = spawn_link(main, scheduler_jobs, [JobTimeout, Pid_wait_jobs, Puerto]),
+    register(pid_scheduler_job, Pid_scheduler_job),
+    Pid_caller ! scheduler_listo,
     receive 
-    {'EXIT', _From, _Reason} ->
-        unregister(pid_scheduler_job),
-        supervisor_scheduler_jobs(JobTimeout, Pid_wait_jobs, Puerto) %"Busca esta funcion en el modulo actual" entonces cuando volves a compilar la busca la nueva compilacion"
+        {'EXIT', _From, _Reason} ->
+            unregister(pid_scheduler_job),
+            supervisor_scheduler_jobs(JobTimeout, Pid_wait_jobs, Puerto, self())
     end.
 
 % Obtiene la lista de nodos activos, crea tabla de PENDIENTES, crea y LINKEA los procesos scheduler_job y wait_job 
@@ -323,8 +324,11 @@ inicializar_sistema(N, Puerto) ->
     
     List_nodos_separados = string:split(ListSinPrefijo, ";", all),
     ListMaximos = obtener_cant_maxima_recursos(List_nodos_separados, [0,0,0]),
-    JobTimeout = 5000,
-    ets:new(pendientes, [named_table, public, set]), 
+    JobTimeout = 10000,
+    ets:new(pendientes, [named_table, public, set]),
     Pid_wait_jobs = spawn_link(?MODULE, wait_jobs, [N]), 
-    spawn_link(?MODULE, supervisor_scheduler_jobs, [JobTimeout, Pid_wait_jobs, Puerto]),
+    spawn_link(?MODULE, supervisor_scheduler_jobs, [JobTimeout, Pid_wait_jobs, Puerto, self()]),
+    receive
+        scheduler_listo -> ok
+    end,
     ListMaximos.

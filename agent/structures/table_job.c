@@ -42,7 +42,6 @@ bool job_add(int job_id, int nreqs, const job_req_t *reqs) {
 
     nuevo_job->job_id = job_id;
     nuevo_job->nreqs = cantidad_a_copiar;
-    
     memcpy(nuevo_job->reqs, reqs, cantidad_a_copiar * sizeof(job_req_t));
 
     char key[32];

@@ -36,7 +36,7 @@ int resource_count = 0;
 
 uint16_t puerto_tcp;
 int epollfd;
-int sockudp;
+int sockudp = -1;
 int scheduler_fd;
 FdInfo *scheduler_info;
 
@@ -81,7 +81,7 @@ int main(int argc, char* argv[]) {
         return -1;
 
     /* Iniciamos los sockets */
-    sockudp = init_sock_udp();
+    init_sock_udp();
     int listen_sock_schedulers = init_listen_sock_scheduler();
     int listen_sock_nodes = init_listen_sock_nodes();
 

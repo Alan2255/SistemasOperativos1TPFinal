@@ -30,6 +30,8 @@ void agent_manager_shutdown() {
 void agent_manager_add(char* ip, char* port, int count_resources, Resource* resources, int timerfd) {
     if (!table_agent) return;
 
+    printf("nuevo agente: %s:%s\n",ip,port);
+
     AgentNode *nuevo_nodo = malloc(sizeof(AgentNode));
     if (!nuevo_nodo) return; 
     
@@ -53,10 +55,7 @@ void agent_manager_add(char* ip, char* port, int count_resources, Resource* reso
             // Copia directa de los enteros (valores primitivos)
             nuevo_nodo->resources[i].total_capacity = resources[i].total_capacity;
             nuevo_nodo->resources[i].available = resources[i].available; 
-            printf("%i ",nuevo_nodo->resources[i].available);
         }
-        printf("\n");
-
     }
 
     hash_set(table_agent, ip, nuevo_nodo);

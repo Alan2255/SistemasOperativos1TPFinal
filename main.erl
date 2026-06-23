@@ -11,7 +11,7 @@ generate_jobs(0, _ListMaximos) -> % cuando N es 0, termina
 % Recibe: N(int), ListMaximos(lista de 3 enteros)
 generate_jobs(N, ListMaximos) -> %N(int), ListMaximos(lista de 3 enteros)
     [MaxCPU, MaxMEM, MaxGPU] = ListMaximos,
-    JobID_int = erlang:unique_integer(), %genera un entero unico en toda la instancia actual del sistema(maq virtual BEAM)
+    JobID_int = erlang:unique_integer([positive]), %genera un entero unico en toda la instancia actual del sistema(maq virtual BEAM)
     JobID = integer_to_list(JobID_int),
     ListRecursos = ["cpu", "mem", "gpu"],
 
