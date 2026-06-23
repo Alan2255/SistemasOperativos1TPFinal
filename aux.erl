@@ -23,8 +23,8 @@ obtener_cant_maxima_recursos([Nodo | Resto], ListMaximos) ->
 
         _ ->
             %si no pudo asignar es pq esta mal el nodo
-            io:format("Nodo mal formado!~n"),
-            throw(badmatch) %Si mandaron datos erroneos desde C, terminamos el programa pq no podra funcionar
+            io:format("Nodo mal formado! ~n"),
+            throw(badmatch) %Si mandaron datos erroneos desde C, terminamos el programa porque no podra funcionar
     end.
           
 %Split devuelve: primera lista con los primeros k elem y la segunda lista el resto ej lists:split(3, [a,b,c,d]) devolvera
@@ -192,23 +192,31 @@ armar_peticiones(JobID, Job, CantRecursos, MapNodos) -> %%JobID(string), Job(str
             {Msg_REQUEST, Msg_RELEASE}
     end.
 
-%Se intenta conectar al socket, si es exitosa, envia GET_NODES para consultar sobre los nodos activos, recibe una lista en binario de estos y crea el mapa con nodos y sus cantidades
+
+% Remueve el prefijo "NODES " si está presente en el string
+remover_prefijo_nodes("NODES " ++ Resto) -> Resto;
+remover_prefijo_nodes(String) -> String.
+
+% Se intenta conectar al socket, si es exitosa, envia GET_NODES para consultar sobre los nodos activos, recibe una lista en binario de estos y crea el mapa con nodos y sus cantidades
 % Recibe: Puerto(int)
 % Retorna {ok, Socket, MapNodos} si fue exitoso, donde Socket(int), MapNodos(mapa donde key es el nodo y value una lista de 3 int donde cada cantidad pertenece a CPU, MEM, GPU en ese orden.)
 % Retorna {error, Reason} si fallo al conectarse al socket.
 conectar_y_obtener_nodos(Puerto) ->
-    case gen_tcp:connect("localhost", Puerto, [binary, {packet, 2}]) of 
+    case gen_tcp:connect("localhost", Puerto, [binary, {packet, 2}, {active, false}]) of 
         {ok, Socket} ->
-            gen_tcp:send(Socket, <<"GET_NODES">>), %consulto con el agente C, me respondera con una lista de nodos vivos en formato de texto, EJ: NODES 192.168.1.10:8100:cpu:4:mem:8192:gpu:1 
-            {ok, BinList} = gen_tcp:recv(Socket, 0),%por mas q diga lista lor recibo como un binario q luego transformo a string
+            gen_tcp:send(Socket, <<"GET_NODES">>), 
+            {ok, BinList} = gen_tcp:recv(Socket, 0),
 
-            List_nodos_separados = string:split(binary_to_list(BinList), ";", all),% devuelve lista donde cada elem es un nodo con sus atributos
+            ListStr = binary_to_list(BinList),
+            ListSinPrefijo = remover_prefijo_nodes(ListStr),
+
+            List_nodos_separados = string:split(ListSinPrefijo, ";", all),
             MapNodos = parsear_lista_nodos(List_nodos_separados),
             {ok, Socket, MapNodos};
 
         {error, Reason} ->
             {error, Reason}
-    end.    
+    end.
 
 %Recibe la respuesta de la peticion del job enviado y maneja que hacer en cada caso, cuando termina un job, lo elimina de la tabla de Pendientes, registra su log y envia -
 %- msg a wait_jobs avisando que termino.
@@ -275,7 +283,7 @@ wait_jobs(N) -> %N(int)
 % Retorna {ok, BinList} en caso de conexion y recibimiento exitoso, donde BinList es una lista en binario de los nodos activos disponibles con sus cantidades.
 % Retorna {error, Reason} en caso de conexion erronea, al conectarse o al hacer el recv
 get_nodes_or_exit(Puerto)-> %packet, 2 lo q hace es q en los primeros 2 bytes pone la longitud y en lo qsigue el msg
-    case  gen_tcp:connect("localhost", Puerto, [binary, {packet, 2}]) of %envio para conectarme al puerto 8100, si es exitosa devuelve ok socket
+    case  gen_tcp:connect("localhost", Puerto, [binary, {packet, 2}, {active, false}]) of %envio para conectarme al puerto 8100, si es exitosa devuelve ok socket
         {ok, Socket} ->
             gen_tcp:send(Socket, <<"GET_NODES">>), %consulto con el agente C respondera con una lista con los nodos disponoinbiles, necesito esto para armar listMax para generar los jobs
             % EJ: NODES 192.168.1.10:8100:cpu:4:mem:8192:gpu:1 ; 192.168.1.11:8101:cpu:2:mem:4096
@@ -304,24 +312,19 @@ supervisor_scheduler_jobs(JobTimeout, Pid_wait_jobs, Puerto) ->% JobTimeout(Time
         supervisor_scheduler_jobs(JobTimeout, Pid_wait_jobs, Puerto) %"Busca esta funcion en el modulo actual" entonces cuando volves a compilar la busca la nueva compilacion"
     end.
 
-%Obtiene la lista de nodos activos, crea tabla de PENDIENTES, crea y LINKEA los procesos scheduler_job y wait_job 
-%Recibe: N(cantidad de jobs a crear), Puerto(int)
-%Retorna: ListMaximos(lista de 3 int, formada por la suma de la cantidad de ese recurso entre todos los nodos disponibles, donde el orden de las cantidades es CPU, MEM, GPU.)
+% Obtiene la lista de nodos activos, crea tabla de PENDIENTES, crea y LINKEA los procesos scheduler_job y wait_job 
+% Recibe: N(cantidad de jobs a crear), Puerto(int)
+% Retorna: ListMaximos(lista de 3 int, formada por la suma de la cantidad de ese recurso entre todos los nodos disponibles, donde el orden de las cantidades es CPU, MEM, GPU.)
 inicializar_sistema(N, Puerto) -> 
     {ok, BinList} = get_nodes_or_exit(Puerto),
-    ListStr = binary_to_list(BinList),
-    %Sacamos "Nodes "
-    ListSinPrefijo = case ListStr of
-        "NODES " ++ Resto -> 
-            Resto; %Si recibe NODES lo ignora
-        _ -> 
-            ListStr %sino lo deja igual
-    end,
-    List_nodos_separados = string:split(binary_to_list(ListSinPrefijo), ";", all),% devuelve lista donde cada elem es un nodo con sus atributos
+    
+    % Usamos la nueva función acá también:
+    ListSinPrefijo = remover_prefijo_nodes(binary_to_list(BinList)),
+    
+    List_nodos_separados = string:split(ListSinPrefijo, ";", all),
     ListMaximos = obtener_cant_maxima_recursos(List_nodos_separados, [0,0,0]),
     JobTimeout = 5000,
-    %TABLA DE PENDIENTES: son los jobs q estan pendientes(fueron mandados y tdv no tienen rta), ets sierve para almacenar datos de forma compartida entre procesos
-    ets:new(pendientes, [named_table, public, set]), %named table q la podemos llamar por su nombre, public cualq proceso puede acceder, set para q no repita
-    Pid_wait_jobs = spawn_link(?MODULE, wait_jobs, [N]), %Creamos wait jobs para q cliente recien termine cuando terminen de ejecutarse todos los jobs y no teremine antes
-    spawn_link(?MODULE, supervisor_scheduler_jobs, [JobTimeout, Pid_wait_jobs, Puerto]),%Si se cae el scheduler job lo levanta, spawnlink para q el server se entere si muere el supervisor
+    ets:new(pendientes, [named_table, public, set]), 
+    Pid_wait_jobs = spawn_link(?MODULE, wait_jobs, [N]), 
+    spawn_link(?MODULE, supervisor_scheduler_jobs, [JobTimeout, Pid_wait_jobs, Puerto]),
     ListMaximos.
