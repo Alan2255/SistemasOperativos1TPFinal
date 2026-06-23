@@ -9,7 +9,6 @@ void send_announce() {
     char buf[TAM_BUF];
     char buf_resources[(MAX_BYTES_NAME_RESOURCE+1+4)*MAX_RESOURCES_NODE];
     local_resources_to_str(buf_resources);
-    printf("%s\n", buf_resources);
     sprintf(buf, "ANNOUNCE %d %s", puerto_tcp, buf_resources);
 
     struct sockaddr_in dest;

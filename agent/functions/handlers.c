@@ -280,10 +280,7 @@ void handle_announce(FdInfo* info) {
             timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
 
             // Agregamos el nodo a la tabla
-            agent_manager_add(ip, port, res_count, resources, timerfd);
-            printf("Alguien se registro \n");
-
-            
+            agent_manager_add(ip, port, res_count, resources, timerfd);  
 
             // Agregamos el timer a la instancia epoll
             FdInfo *timer_info = epoll_add(timerfd, FD_NODE_TIMER, EPOLLIN | EPOLLET);
@@ -437,20 +434,16 @@ int handle_scheduler(FdInfo *info) {
             }
             else if (strncmp(command, "GET_NODES", strlen("GET_NODES")) == 0) {
                 char *buf = agent_manager_get_nodes();
-                printf("%s \n",buf);
                 len = sprintf(reply, "%s", buf);
                 nlen = htons(len);
                 if (send_msg_tcp(info->fd, (char*)&nlen, NBYTES_PACKET_ERL, info) == -1) {
-                    printf("Sale por acá \n");
                     return -1;
                 }
                 if (send_msg_tcp(info->fd, reply, len, info) == -1) {
-                    printf("Sale por este otro lado \n");
                     return -1;
                 }
             }
             else 
-                printf("Sale por ESTE OTROOOOOO \n");
                 return -1;
 
             /* Actualizamos el buffer */

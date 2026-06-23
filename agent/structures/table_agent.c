@@ -45,7 +45,18 @@ void agent_manager_add(char* ip, char* port, int count_resources, Resource* reso
 
     if (resources != NULL && count_resources > 0) {
         int a_copiar = (count_resources > MAX_RESOURCES_NODE) ? MAX_RESOURCES_NODE : count_resources;
-        memcpy(nuevo_nodo->resources, resources, a_copiar * sizeof(Resource));
+        
+        for (int i = 0; i < a_copiar; i++) {
+            strncpy(nuevo_nodo->resources[i].name, resources[i].name, MAX_BYTES_NAME_RESOURCE - 1);
+            nuevo_nodo->resources[i].name[MAX_BYTES_NAME_RESOURCE - 1] = '\0';
+            
+            // Copia directa de los enteros (valores primitivos)
+            nuevo_nodo->resources[i].total_capacity = resources[i].total_capacity;
+            nuevo_nodo->resources[i].available = resources[i].available; 
+            printf("%i ",nuevo_nodo->resources[i].available);
+        }
+        printf("\n");
+
     }
 
     hash_set(table_agent, ip, nuevo_nodo);
@@ -186,7 +197,7 @@ char* agent_manager_get_nodes() {
             char fragmento_recurso[32];
             int res_escrito = snprintf(fragmento_recurso, sizeof(fragmento_recurso), ":%s:%d", 
                                        agente->resources[j].name, 
-                                       agente->resources[j].total_capacity);
+                                       agente->resources[j].available);
             
             if (escrito + res_escrito < (int)sizeof(fragmento_agente)) {
                 strcat(fragmento_agente, fragmento_recurso);
