@@ -4,6 +4,9 @@
 #include <stdbool.h>
 #include <arpa/inet.h>
 #include "../consts.h"
+#include "hash.h"
+
+extern Hash *table_job;
 
 // Request de un recurso
 typedef struct { 

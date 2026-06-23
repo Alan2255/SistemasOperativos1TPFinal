@@ -23,6 +23,9 @@ typedef struct {
     pthread_mutex_t mutex;
 } Resource;
 
+extern Resource* resources;
+extern int resource_count;
+
 // --- API de los recursos locales ---
 
 // Crea los recursos locales

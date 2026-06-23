@@ -1,10 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "hash.h" 
 #include "table_agent.h"
 
-static Hash *table_agent = NULL;
 
 // Crea la tabla de agentes
 void agent_manager_init() {

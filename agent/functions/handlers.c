@@ -1,3 +1,4 @@
+#define _GNU_SOURCE    
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
 #include <sys/socket.h>
@@ -14,7 +15,6 @@
 #include "../structures/table_reservation.h"
 #include "../consts.h"
 #include "functions.h"
-#define _GNU_SOURCE    
 
 /* Maneja el evento EPOLLOUT de un socket tcp */
 int handle_tcp_epollout(FdInfo* info) {
@@ -244,6 +244,8 @@ void handle_agent_disconnect(FdInfo* info) {
 
 /* Maneja la recepcion de un anuncion es el socket udp */
 void handle_announce(FdInfo* info) {
+
+    printf("Alguien se anuncio \n");
     int fd = info->fd;
     char buf[TAM_BUF];
     int len_buf;
@@ -276,10 +278,13 @@ void handle_announce(FdInfo* info) {
         if (timerfd < 0) { // Si el nodo no se encuentra en la tabla
             // Creamos el timer
             timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
-    
+
             // Agregamos el nodo a la tabla
             agent_manager_add(ip, port, res_count, resources, timerfd);
+            printf("Alguien se registro \n");
+
             
+
             // Agregamos el timer a la instancia epoll
             FdInfo *timer_info = epoll_add(timerfd, FD_NODE_TIMER, EPOLLIN | EPOLLET);
             strncpy(((fd_node_timer_data *)(timer_info->data))->ip, ip,
@@ -430,7 +435,22 @@ int handle_scheduler(FdInfo *info) {
                 // Eliminamos el job de la tabla
                 job_release(atoi(job_id));
             }
+            else if (strncmp(command, "GET_NODES", strlen("GET_NODES")) == 0) {
+                char *buf = agent_manager_get_nodes();
+                printf("%s \n",buf);
+                len = sprintf(reply, "%s", buf);
+                nlen = htons(len);
+                if (send_msg_tcp(info->fd, (char*)&nlen, NBYTES_PACKET_ERL, info) == -1) {
+                    printf("Sale por acá \n");
+                    return -1;
+                }
+                if (send_msg_tcp(info->fd, reply, len, info) == -1) {
+                    printf("Sale por este otro lado \n");
+                    return -1;
+                }
+            }
             else 
+                printf("Sale por ESTE OTROOOOOO \n");
                 return -1;
 
             /* Actualizamos el buffer */

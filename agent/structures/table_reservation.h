@@ -3,6 +3,9 @@
 
 #include <stdbool.h>
 #include "../consts.h"
+#include "hash.h"
+
+extern Hash *table_reservation;
 
 // Job reservado
 typedef struct {

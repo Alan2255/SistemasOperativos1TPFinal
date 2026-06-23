@@ -1,3 +1,4 @@
+#define _GNU_SOURCE    
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,6 +28,12 @@
 #include "structures/table_reservation.h"
 #include "functions/functions.h"
 
+Hash *table_agent = NULL;
+Hash *table_job = NULL;
+Hash *table_reservation = NULL;
+Resource* resources = NULL;
+int resource_count = 0;
+
 uint16_t puerto_tcp;
 int epollfd;
 int sockudp;
@@ -42,7 +49,7 @@ int main(int argc, char* argv[]) {
     }
 
     puerto_tcp = atoi(argv[1]);
-    if (puerto_tcp < 7000 && puerto_tcp > 13000) 
+    if (puerto_tcp < 7000 || puerto_tcp > 13000) 
         printf("Error: el puerto debe estar entre 7000 y 13000 (incluidos)\n");
 
     int num_resources = atoi(argv[2]);
@@ -109,6 +116,8 @@ int main(int argc, char* argv[]) {
     pthread_t threads[N_THREADS];
     for (int i = 0; i < N_THREADS; i++)
         pthread_create(&threads[i], NULL, event_loop, NULL);
+
+    pthread_join(threads[0], NULL);
 }
 
 

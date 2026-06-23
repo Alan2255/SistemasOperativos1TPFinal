@@ -4,9 +4,6 @@
 #include <stdlib.h>
 #include "local_resources.h"
 
-static Resource* resources = NULL;
-static int resource_count = 0;
-
 // Queue
 static void queue_init(JobQueue *q) {
     q->front = 0;

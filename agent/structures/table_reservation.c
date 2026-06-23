@@ -1,10 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "hash.h"
 #include "table_reservation.h"
 
-static Hash *table_reservation = NULL;
 
 // Función hash
 static void fun_hash(int job_id, char *out_key, size_t max_len) {

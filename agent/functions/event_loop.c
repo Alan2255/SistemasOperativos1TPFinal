@@ -4,6 +4,7 @@
 #include "../consts.h"
 #include "../structures/fdinfo.h"
 #include "functions.h"
+#include <stdio.h>
 
 /* Event loop de la instancia epoll (para correr en cada thread)*/
 void* event_loop(void*) {
@@ -15,6 +16,10 @@ void* event_loop(void*) {
             return NULL;
         for (n = 0; n < nfds; ++n) {
             FdInfo* info = (FdInfo*)(events[n].data.ptr);
+            if (info == NULL) {
+                // printf("[ERROR STACK] Se recibio un evento con data.ptr = NULL. Saltando evento para evitar SegFault.\n");
+                continue; 
+            }
             switch (info->type) {
                 case FD_SCHEDULER:
                     if (events[n].events & (EPOLLHUP | EPOLLERR)) {

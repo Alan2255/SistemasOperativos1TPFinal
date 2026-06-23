@@ -5,6 +5,9 @@
 #include "fdinfo.h"
 #include "local_resources.h"
 #include <arpa/inet.h>
+#include "hash.h" 
+
+extern Hash *table_agent;
 
 // Agente
 typedef struct {
@@ -52,7 +55,7 @@ char* agent_manager_get_port(const char *ip);
 void agent_manager_delete(const char *ip);
 
 // Convierte la tabla de agentes en un string con las capacidades de los recursos
-char* agent_manager_get_nodes(void);
+char* agent_manager_get_nodes();
 
 // Busca un agente por el fd de su conexion y copia su IP en ip_out
 int agent_manager_get_ip_by_fd(int fd, char* ip_out);

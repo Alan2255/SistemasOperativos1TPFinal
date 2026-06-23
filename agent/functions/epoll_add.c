@@ -18,12 +18,15 @@ FdInfo* epoll_add(int fd, fdtype type, int events) {
         return NULL;
     ev.data.ptr = info;
 
+
     /* Agregamos a epoll */
     // Si no se puede anadir eliminamos la estructura 
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev) == -1) {
         fd_info_destr(info);
+        // printf("Se elimina la estructura\n");
         return NULL;
     }
+    // printf("Hasta aca epoll\n");
 
     return info;
 }

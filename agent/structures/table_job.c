@@ -2,10 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
-#include "hash.h"
 #include "table_job.h"
-
-static Hash *table_job = NULL;
 
 // Función hash
 static void fun_hash(int job_id, char *out_key, size_t max_len) {

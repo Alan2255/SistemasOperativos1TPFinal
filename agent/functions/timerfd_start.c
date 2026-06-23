@@ -15,7 +15,7 @@ int timerfd_start(int timerfd, int sec) {
     ts.it_interval.tv_sec = 0;
     ts.it_interval.tv_nsec = 0;
 
-    if (timerfd_settime(timerfd, TFD_NONBLOCK, &ts, NULL) == -1)
+    if (timerfd_settime(timerfd, 0, &ts, NULL) == -1)
         return -1;
 
     return 0;
