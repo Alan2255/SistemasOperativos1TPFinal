@@ -18,7 +18,7 @@
 #define RESOURCES_LOCAL 3 // cantidad de recursos locales
 
 #define MAX_NODES 64 // Maxima cantidad de nodos en la tabla de nodos
-#define MAX_RESOURCES_NODE 8 // Maxima cantidad de recursos por nodo
+#define MAX_RESOURCES_AGENT 8 // Maxima cantidad de recursos por nodo
 #define NODE_TIMEOUT_SEC 15 // Tiempo (segundos) para considerar un nodo caido 
 #define ANNOUNCE_SEC 5 // Tiempo (segundos) cada cuanto se va a enviar un anuncio
 

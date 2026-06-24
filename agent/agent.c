@@ -41,38 +41,12 @@ int scheduler_fd;
 FdInfo *scheduler_info;
 
 int main(int argc, char* argv[]) {
+    int num_resources = MAX_RESOURCES_AGENT;
+    char* resource_names[MAX_RESOURCES_AGENT];
+    int capacities[MAX_RESOURCES_AGENT];
+    if (get_port_and_resources(argc, argv, &num_resources, resource_names, capacities) == -1)
+        return -1;
 
-    /* Obtenemos el puerto y los recursos locales por linea de comandos */
-    if (argc < 5) {
-        printf("Uso: <port> <n> <name_1> ... <name_n> <amount_1> ... <amount_n>\n");
-        return 1;
-    }
-
-    puerto_tcp = atoi(argv[1]);
-    if (puerto_tcp < 7000 || puerto_tcp > 13000) 
-        printf("Error: el puerto debe estar entre 7000 y 13000 (incluidos)\n");
-
-    int num_resources = atoi(argv[2]);
-    if (argc != 3 + (num_resources * 2)) {
-        printf("Error: cantidad incorrecta de argumentos \n");
-        printf("Uso: <port> <n> <name_1> ... <name_n> <amount_1> ... <amount_n>\n");
-        return 1;
-    }
-
-    char** resource_names = malloc(sizeof(char*) * num_resources);
-    if (resource_names == NULL)
-        return 1;
-    int* capacities = malloc(sizeof(int) * num_resources);
-    if (capacities == NULL) {
-        free(resource_names);
-        return 1;
-    }
-
-    for (int i = 0; i < num_resources; i++) {
-        resource_names[i] = argv[3 + i];
-        capacities[i] = atoi(argv[3 + num_resources + i]);
-    }
-    
     local_resources_init(num_resources, resource_names, capacities);
 
     /* Iniciamos la instancia epoll */

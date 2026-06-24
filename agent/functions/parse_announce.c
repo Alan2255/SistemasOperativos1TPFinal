@@ -9,8 +9,8 @@
 /* Parsea el anuncio "ANNOUNCE <puerto> <recursos>"
 y copia los datos en los parametros pasados. */
 int parse_announce(char *msg, char *port, Resource *resources, int *res_count) {
-    char* tokens[2 + MAX_RESOURCES_NODE];
-    int count_tokens = tokenize_str(msg, " ", 2 + MAX_RESOURCES_NODE, tokens);
+    char* tokens[2 + MAX_RESOURCES_AGENT];
+    int count_tokens = tokenize_str(msg, " ", 2 + MAX_RESOURCES_AGENT, tokens);
 
     /* Parseamos el comando */
     if (count_tokens <= 2 || strcmp(tokens[0], "ANNOUNCE") != 0)

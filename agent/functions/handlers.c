@@ -271,7 +271,7 @@ void handle_announce(FdInfo* info) {
     
         /* Parseamos el mensaje*/
         char port[PORTSTRLEN];
-        Resource resources[MAX_RESOURCES_NODE];
+        Resource resources[MAX_RESOURCES_AGENT];
         int res_count;
         if (parse_announce(buf, port, resources, &res_count) == -1)
             return;

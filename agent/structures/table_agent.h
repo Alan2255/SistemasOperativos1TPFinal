@@ -15,7 +15,7 @@ typedef struct {
     char port[PORTSTRLEN];
     FdInfo* fdinfo;
     int count_resources;
-    Resource resources[MAX_RESOURCES_NODE];
+    Resource resources[MAX_RESOURCES_AGENT];
     int timerfd;
 } AgentNode;
 

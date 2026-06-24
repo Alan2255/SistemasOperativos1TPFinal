@@ -13,6 +13,10 @@ extern int udp_sock;            // Socket para envio/recibo de anuncios
 extern int scheduler_fd;       // Socket de conexion con el scheduler
 extern FdInfo *scheduler_info;
 
+/* Obtiene el puerto (se lo asigna a 'puerto_tcp) y los recursos (los guarda en los parametros) desde la linea de comandos. 
+En caso de error por formato, imprime indicando el formato y devuelve -1. */
+int get_port_and_resources(int argc, char **argv, int *num_resources, char **resource_names, int *capacities);
+
 /* Retorna la estructura asociada al fd en epoll, o NULL en 
 caso de error. */
 FdInfo* epoll_add(int fd, fdtype type, int events);

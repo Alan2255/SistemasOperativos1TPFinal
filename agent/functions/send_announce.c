@@ -7,7 +7,7 @@
 /* Envia el anuncio */ 
 void send_announce() {
     char buf[TAM_BUF];
-    char buf_resources[(MAX_BYTES_NAME_RESOURCE + 1 + 4) * MAX_RESOURCES_NODE];
+    char buf_resources[(MAX_BYTES_NAME_RESOURCE + 1 + 4) * MAX_RESOURCES_AGENT];
     
     local_resources_to_str(buf_resources);
     

@@ -46,7 +46,7 @@ void agent_manager_add(char* ip, char* port, int count_resources, Resource* reso
     nuevo_nodo->timerfd = timerfd;
 
     if (resources != NULL && count_resources > 0) {
-        int a_copiar = (count_resources > MAX_RESOURCES_NODE) ? MAX_RESOURCES_NODE : count_resources;
+        int a_copiar = (count_resources > MAX_RESOURCES_AGENT) ? MAX_RESOURCES_AGENT : count_resources;
         
         for (int i = 0; i < a_copiar; i++) {
             strncpy(nuevo_nodo->resources[i].name, resources[i].name, MAX_BYTES_NAME_RESOURCE - 1);
