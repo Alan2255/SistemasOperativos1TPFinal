@@ -26,7 +26,7 @@ void send_announce() {
     dest.sin_addr.s_addr = htonl(INADDR_BROADCAST); // 255.255.255.255
 
     /* 3. Validación de envío */
-    ssize_t bytes_sent = sendto(sockudp, buf, strlen(buf), 0, (struct sockaddr*)&dest, sizeof(dest));
+    ssize_t bytes_sent = sendto(udp_sock, buf, strlen(buf), 0, (struct sockaddr*)&dest, sizeof(dest));
     if (bytes_sent == -1) {
         perror("Error en sendto UDP (Broadcast)");
     }

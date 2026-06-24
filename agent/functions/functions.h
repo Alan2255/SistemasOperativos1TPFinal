@@ -9,13 +9,26 @@
 
 extern uint16_t puerto_tcp;
 extern int epollfd;
-extern int sockudp;            // Socket para envio/recibo de anuncios
+extern int udp_sock;            // Socket para envio/recibo de anuncios
 extern int scheduler_fd;       // Socket de conexion con el scheduler
 extern FdInfo *scheduler_info;
 
 /* Retorna la estructura asociada al fd en epoll, o NULL en 
 caso de error. */
 FdInfo* epoll_add(int fd, fdtype type, int events);
+
+/* Inicia un socket no bloqueante del tipo dado, lo bindea a la direccion dada 
+y lo agrega a la instancia epoll con el tipo de dato dado. */
+int init_sock(int type, int ip, int port, fdtype typedata);
+
+/* Inicia el socket udp para la recepcion de anuncios */
+int init_udp_sock();
+
+/* Inicia el socket de escucha para conexiones con otros agentes */
+int init_agents_listen_sock();
+
+/* Inicia el socket de escucha para conexion con el scheduler  */
+int init_scheduler_listen_sock();
 
 /* Event loop de la instancia epoll (para correr en cada thread)*/
 void* event_loop(void*);
@@ -47,15 +60,6 @@ void handle_announce(FdInfo* info);
 
 /* Maneja la recepcion de un mensaje del scheduler */
 int handle_scheduler(FdInfo *info);
-
-/* Inicia el socket udp para la recepcion de anuncios */
-int init_sock_udp();
-
-/* Inicia el socket de escucha para conectar con el scheduler */
-int init_listen_sock_scheduler();
-
-/* Inicia el socket de escucha para conexiones con otros agentes */
-int init_listen_sock_nodes();
 
 /* Parsea el anuncio de un nodo y copia los datos en los parametros pasados. */
 int parse_announce(char *msg, char *port, Resource *resources, int *res_count);

@@ -54,7 +54,7 @@ void* event_loop(void*) {
                     handle_announce_timer(info);
                     break;
     
-                case FD_LISTEN_NODE:
+                case FD_AGENTS_LISTEN:
                     handle_agent_connect(info);
                     break;
     

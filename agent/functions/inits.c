@@ -1,108 +1,77 @@
 #include <sys/socket.h>
+#include <sys/socket.h>
 #include <sys/epoll.h>
 #include <netinet/in.h>
 #include <stdlib.h>
 #include "../consts.h"
 #include "../structures/fdinfo.h"
 #include "functions.h"
+#include <asm-generic/socket.h>
 
-/* Inicia el socket udp para la recepcion de anuncios */
-int init_sock_udp() {
-    /* Creamos el socket */
-    sockudp = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, 0);
-    if (sockudp == -1)
+/* Inicia un socket no bloqueante del tipo dado, lo bindea a la direccion dada 
+y lo agrega a la instancia epoll con el tipo de dato dado. */
+int init_sock(int type, int ip, int port, fdtype typedata) {
+    // Creamos el socket
+    int sock = socket(AF_INET, type | SOCK_NONBLOCK, 0);
+    if (sock == -1)
         return -1;
 
-    /* Seteamos opciones de manipulacion necesarias para el
-    socket */
+    // Seteamos opcion para bindear inmediatamente el socket a
+    // la direccion y puerto pasados 
     int yes = 1;
-    if (setsockopt(sockudp, SOL_SOCKET, SO_REUSEADDR, &yes,
+    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes,
                     sizeof(yes)) == -1)
         return -1;
-    if (setsockopt(sockudp, SOL_SOCKET, SO_BROADCAST, &yes,
+    if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &yes,
                     sizeof(yes)) == -1)
         return -1;
 
-    /* Bind a la direccion en la red y puerto PUERTO_UDP */
+    /* Bind */
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(PUERTO_UDP);
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    if (bind(sockudp, (struct sockaddr *)&addr,
-                sizeof(addr)) == -1)
+    addr.sin_addr.s_addr = htonl(ip);
+    addr.sin_port = htons(port);
+    if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) == -1)
         return -1;
 
     /* Agregamos a la instancia epoll */
-    if (epoll_add(sockudp, FD_UDP, EPOLLIN | EPOLLET | EPOLLONESHOT) == NULL)
+    if (epoll_add(sock, typedata, EPOLLET | EPOLLONESHOT | EPOLLIN) == NULL)
         return -1;
 
-    return sockudp;
+    return sock;
 }
 
-/* Inicia el socket de escucha para conectar con el scheduler */
-int init_listen_sock_scheduler() {
-    /* Creamos el socket */
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd == -1)
-        return -1;
+/* Inicia el socket udp para la recepcion de anuncios */
+int init_udp_sock() {
+    int sock = init_sock(SOCK_DGRAM, INADDR_ANY, PUERTO_UDP, FD_UDP);
 
-    /* Seteamos opciones de manipulacion necesarias para el
-    socket */
+    // Seteamos el udp_sock para enviar enviar mensajes a INADDR_BROADCAST
     int yes = 1;
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes,
-                    sizeof(yes)) == -1)
+    if (setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &yes, sizeof(yes)) == -1)
         return -1;
 
-    /* Bind a localhost y puerto 'puerto_tcp' */
-    struct sockaddr_in addr;
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(puerto_tcp);
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    if (bind(sockfd, (struct sockaddr *)&addr,
-                sizeof(addr)) == -1)
-        return -1;
-
-    /* Lo ponemos en modo escucha */
-    if (listen(sockfd, 1) == -1)
-        return -1;
-
-    /* Agregamos a la instancia epoll */
-    if (epoll_add(sockfd, FD_LISTEN_SCHEDULER, EPOLLIN | EPOLLET) == NULL)
-        return -1;
-
-    return sockfd;
+    return sock;
 }
 
 /* Inicia el socket de escucha para conexiones con otros agentes */
-int init_listen_sock_nodes() {
-    /* Creamos el socket */
-    int sockfd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
-    if (sockfd == -1)
-        return -1;
-
-    /* Seteamos opciones de manipulacion necesarias para el
-    socket */
-    int yes = 1;
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes,
-                    sizeof(yes)) == -1)
-        return -1;
-
-    /* Bind a la direccion en la red y puerto siguiente a 'puerto_tcp' */
-    struct sockaddr_in addr;
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(puerto_tcp+1);
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    if (bind(sockfd, (struct sockaddr *)&addr,
-                sizeof(addr)) == -1)
-        return -1;
+int init_agents_listen_sock() {
+    int sock = init_sock(SOCK_STREAM, INADDR_ANY, puerto_tcp+1, FD_AGENTS_LISTEN);
 
     /* Lo ponemos en modo escucha para nuevas conexiones*/
-    if (listen(sockfd, MAX_PENDING_CONNECTIONS) == -1)
+    if (listen(sock, MAX_PENDING_CONNECTIONS) == -1)
         return -1;
 
-    /* Agregamos a la instancia epoll */
-    if (epoll_add(sockfd, FD_LISTEN_NODE, EPOLLIN | EPOLLET | EPOLLONESHOT) == NULL)
-        return -1;
-
-    return sockfd;
+    return sock;
 }
+
+/* Inicia el socket de escucha para conexion con el scheduler  */
+int init_scheduler_listen_sock() {
+    int sock = init_sock(SOCK_STREAM, INADDR_ANY, puerto_tcp, FD_LISTEN_SCHEDULER);
+
+    /* Lo ponemos en modo escucha para nuevas conexiones*/
+    if (listen(sock, 1) == -1)
+        return -1;
+
+    return sock;
+}
+

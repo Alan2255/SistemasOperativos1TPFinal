@@ -11,7 +11,7 @@ typedef enum {
     FD_AGENT,
     FD_NODE_TIMER,
     FD_SEND_ANNOUNCE_TIMER,
-    FD_LISTEN_NODE,
+    FD_AGENTS_LISTEN,
     FD_LISTEN_SCHEDULER,
 } fdtype;
 

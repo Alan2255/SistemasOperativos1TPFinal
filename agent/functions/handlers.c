@@ -276,10 +276,14 @@ void handle_announce(FdInfo* info) {
         if (parse_announce(buf, port, resources, &res_count) == -1)
             return;
     
-            printf("puerto: %s\n",port);
+        printf("ip: %s, ", ip);
+        printf("puerto: %s, entabla=",port);
 
         /* Agregamos o actualizamos el nodo en la tabla */
         int timerfd = agent_manager_get_timerfd(ip);
+
+        printf("%d\n", timerfd);
+
         if (timerfd < 0) { // Si el nodo no se encuentra en la tabla
             // Creamos el timer
             timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
