@@ -34,19 +34,19 @@ Hash *table_reservation = NULL;
 Resource* resources = NULL;
 int resource_count = 0;
 
-uint16_t puerto_tcp;
-int epollfd;
+uint16_t puerto_tcp = -1;
+int epollfd = -1;
 int udp_sock = -1;
-int scheduler_fd;
+int scheduler_fd = -1;
 FdInfo *scheduler_info;
 
 int main(int argc, char* argv[]) {
+    /* Obtenemos y seteamos: el puerto y los recursos locales*/
     int num_resources = MAX_RESOURCES_AGENT;
     char* resource_names[MAX_RESOURCES_AGENT];
     int capacities[MAX_RESOURCES_AGENT];
     if (get_port_and_resources(argc, argv, &num_resources, resource_names, capacities) == -1)
         return -1;
-
     local_resources_init(num_resources, resource_names, capacities);
 
     /* Iniciamos la instancia epoll */
