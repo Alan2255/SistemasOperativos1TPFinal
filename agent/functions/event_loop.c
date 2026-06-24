@@ -58,7 +58,7 @@ void* event_loop(void*) {
                     handle_agent_connect(info);
                     break;
     
-                case FD_LISTEN_SCHEDULER:
+                case FD_SCHEDULER_LISTEN:
                     handle_listen_scheduler(info);
                     break;
             }

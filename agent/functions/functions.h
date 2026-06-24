@@ -17,9 +17,11 @@ extern FdInfo *scheduler_info;
 En caso de error por formato, imprime indicando el formato y devuelve -1. */
 int get_port_and_resources(int argc, char **argv, int *num_resources, char **resource_names, int *capacities);
 
-/* Retorna la estructura asociada al fd en epoll, o NULL en 
-caso de error. */
-FdInfo* epoll_add(int fd, fdtype type, int events);
+/* Si la estructura asociada al fd (parametro 'info') es NULL
+agrega el fd a la instancia epoll, en caso contrario solo 
+modifica los cambios asociados al fd. 
+Retorna 'info' creado si no lo estaba y NULL en caso de error. */
+FdInfo* epoll_add(int fd, fdtype type, int events, FdInfo* info);
 
 /* Inicia un socket no bloqueante del tipo dado, lo bindea a la direccion dada 
 y lo agrega a la instancia epoll con el tipo de dato dado. */

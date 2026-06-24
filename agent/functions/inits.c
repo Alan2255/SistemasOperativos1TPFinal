@@ -35,7 +35,7 @@ int init_sock(int type, int ip, int port, fdtype typedata) {
         return -1;
 
     /* Agregamos a la instancia epoll */
-    if (epoll_add(sock, typedata, EPOLLET | EPOLLONESHOT | EPOLLIN) == NULL)
+    if (epoll_add(sock, typedata, EPOLLET | EPOLLONESHOT | EPOLLIN, NULL) == NULL)
         return -1;
 
     return sock;
@@ -66,7 +66,7 @@ int init_agents_listen_sock() {
 
 /* Inicia el socket de escucha para conexion con el scheduler  */
 int init_scheduler_listen_sock() {
-    int sock = init_sock(SOCK_STREAM, INADDR_ANY, puerto_tcp, FD_LISTEN_SCHEDULER);
+    int sock = init_sock(SOCK_STREAM, INADDR_ANY, puerto_tcp, FD_SCHEDULER_LISTEN);
 
     /* Lo ponemos en modo escucha para nuevas conexiones*/
     if (listen(sock, 1) == -1)
@@ -74,4 +74,3 @@ int init_scheduler_listen_sock() {
 
     return sock;
 }
-

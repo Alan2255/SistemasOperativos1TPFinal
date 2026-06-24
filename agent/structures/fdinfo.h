@@ -12,7 +12,7 @@ typedef enum {
     FD_NODE_TIMER,
     FD_SEND_ANNOUNCE_TIMER,
     FD_AGENTS_LISTEN,
-    FD_LISTEN_SCHEDULER,
+    FD_SCHEDULER_LISTEN,
 } fdtype;
 
 typedef struct {

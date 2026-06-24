@@ -27,16 +27,14 @@ int handle_tcp_epollout(FdInfo* info) {
     if (n == -1)
         return -1;
 
-    if (n == 0){ // Si mando todo el buffer:
-        struct epoll_event ev;
-        data->len_buf_out = 0;
+    // Actualizamos el buffer
+    memmove(data->buf_out, data->buf_out + n, data->len_buf_out - n);
+    data->len_buf_out -= n;
 
-        // Sacamos EPOLLOUT de los eventos
-        ev.events = EPOLLIN | EPOLLHUP | EPOLLERR;
-        ev.data.ptr = info;
-        if (epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev) == -1)
-            return -1;
-    } 
+    if (data->len_buf_out == 0) // Si se mando todo el buffer, sacamos EPOLLOUT de los eventos
+        epoll_add(fd, info->type, EPOLLET | EPOLLONESHOT | EPOLLIN | EPOLLHUP | EPOLLERR, info);
+    else // Si no, volvemos a agregar EPOLLOUT 
+        epoll_add(fd, info->type, EPOLLOUT | EPOLLET | EPOLLONESHOT | EPOLLIN | EPOLLHUP | EPOLLERR, info);
 
     return 0;
 }
@@ -75,7 +73,7 @@ void handle_announce_timer(FdInfo* info) {
     timerfd_start(info->fd, ANNOUNCE_SEC);
 }
 
-/* Maneja un el intento de conexion del scheduler */
+/* Maneja el intento de conexion del scheduler */
 void handle_listen_scheduler(FdInfo* info) {
     scheduler_fd = accept4(info->fd, NULL, NULL, SOCK_NONBLOCK);
     if (scheduler_fd == -1)
@@ -83,7 +81,7 @@ void handle_listen_scheduler(FdInfo* info) {
 
     scheduler_info = epoll_add(scheduler_fd, FD_SCHEDULER, 
                                 EPOLLIN | EPOLLHUP | EPOLLERR |
-                                EPOLLET | EPOLLONESHOT);
+                                EPOLLET | EPOLLONESHOT, NULL);
     if(scheduler_info == NULL) {
         close(scheduler_fd);
         return;
@@ -95,7 +93,7 @@ void handle_listen_scheduler(FdInfo* info) {
 
 /* Maneja un el intento de conexion de un agente */
 void handle_agent_connect(FdInfo* info) {
-    /* Aceptamos todos los clientes que llegaron */
+    // Aceptamos todos los clientes que llegaron
     while (1) {
         int agentfd = accept4(info->fd, NULL, NULL, SOCK_NONBLOCK);
 
@@ -107,7 +105,7 @@ void handle_agent_connect(FdInfo* info) {
 
         FdInfo* agent_info = epoll_add(agentfd, FD_AGENT, 
                                     EPOLLIN | EPOLLHUP | EPOLLERR |
-                                    EPOLLET | EPOLLONESHOT);
+                                    EPOLLET | EPOLLONESHOT, NULL);
         if (agent_info == NULL) {
             close(agentfd);
             return;
@@ -117,11 +115,8 @@ void handle_agent_connect(FdInfo* info) {
         ((fd_tcp_data*)(agent_info->data))->len_buf_out = 0;
     }
     
-    /* Volvemos a agregar el fd a la instancia epoll */
-    struct epoll_event ev;
-    ev.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
-    ev.data.ptr = info;
-    epoll_ctl(epollfd, EPOLL_CTL_MOD, info->fd, &ev);
+    // Volvemos a agregar el fd a la instancia epoll
+    epoll_add(info->fd, FD_AGENTS_LISTEN, EPOLLIN | EPOLLET | EPOLLONESHOT, info);
 }
 
 /* Maneja la recepcion de un mensaje de un agente */
@@ -292,7 +287,7 @@ void handle_announce(FdInfo* info) {
             agent_manager_add(ip, port, res_count, resources, timerfd);  
 
             // Agregamos el timer a la instancia epoll
-            FdInfo *timer_info = epoll_add(timerfd, FD_NODE_TIMER, EPOLLIN | EPOLLET);
+            FdInfo *timer_info = epoll_add(timerfd, FD_NODE_TIMER, EPOLLIN | EPOLLET | EPOLLONESHOT, NULL);
             strncpy(((fd_node_timer_data *)(timer_info->data))->ip, ip,
                     INET_ADDRSTRLEN);
         }
@@ -406,7 +401,7 @@ int handle_scheduler(FdInfo *info) {
                                     sizeof(addr));
                             fdinfo_host = epoll_add(sock_host, FD_AGENT, EPOLLIN
                                                     | EPOLLHUP | EPOLLERR 
-                                                    | EPOLLET | EPOLLONESHOT);
+                                                    | EPOLLET | EPOLLONESHOT, NULL);
                             agent_manager_set_fdinfo(host, fdinfo_host);
                         }
         
