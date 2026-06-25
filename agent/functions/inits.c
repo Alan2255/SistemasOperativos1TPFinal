@@ -66,7 +66,7 @@ int init_agents_listen_sock() {
 
 /* Inicia el socket de escucha para conexion con el scheduler  */
 int init_scheduler_listen_sock() {
-    int sock = init_sock(SOCK_STREAM, INADDR_ANY, puerto_tcp, FD_SCHEDULER_LISTEN);
+    int sock = init_sock(SOCK_STREAM, INADDR_LOOPBACK, puerto_tcp, FD_SCHEDULER_LISTEN);
 
     /* Lo ponemos en modo escucha para nuevas conexiones*/
     if (listen(sock, 1) == -1)

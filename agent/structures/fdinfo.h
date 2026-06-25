@@ -2,8 +2,9 @@
 #ifndef FDINFO_H 
 #define FDINFO_H
 
-#include <arpa/inet.h>
 #include "../consts.h"
+#include <pthread.h>
+#include <arpa/inet.h>
 
 typedef enum {
     FD_SCHEDULER,
@@ -25,7 +26,8 @@ typedef struct {
     char buf_in[TAM_BUF];
     int len_buf_in;
     char buf_out[TAM_BUF];
-    int len_buf_out; 
+    int len_buf_out;
+    pthread_mutex_t mutex;
 } fd_tcp_data;
 
 typedef struct {

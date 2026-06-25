@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <pthread.h>
 #include "fdinfo.h"
 
 FdInfo *fd_info_create(int fd, fdtype type) {
@@ -10,8 +11,10 @@ FdInfo *fd_info_create(int fd, fdtype type) {
 
     ret->type = type;
 
-    if (type == FD_SCHEDULER || type == FD_AGENT)
+    if (type == FD_SCHEDULER || type == FD_AGENT) {
         ret->data = malloc(sizeof(fd_tcp_data));
+        pthread_mutex_init(&((fd_tcp_data*)(ret->data))->mutex, NULL);
+    }
     else if (type == FD_NODE_TIMER)
         ret->data = malloc(sizeof(fd_node_timer_data));
     else 
