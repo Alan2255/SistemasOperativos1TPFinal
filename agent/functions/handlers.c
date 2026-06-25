@@ -19,11 +19,13 @@
 
 /* Maneja el evento EPOLLOUT de un socket tcp */
 int handle_tcp_epollout(FdInfo* info) {
+    if (info == NULL)
+        return -1;
+
     int fd = info->fd;
     fd_tcp_data* data = (fd_tcp_data*)(info->data);
 
-    int n = send_msg_tcp(fd, data->buf_out, data->len_buf_out, 
-                            info);
+    int n = write(fd, data->buf_out, data->len_buf_out);
     if (n == -1)
         return -1;
 
@@ -88,7 +90,7 @@ void handle_listen_scheduler(FdInfo* info) {
     }
 
     ((fd_tcp_data*)(scheduler_info->data))->len_buf_in = 0;
-    ((fd_tcp_data*)(scheduler_info->data))->len_buf_out = 0;
+    ((fd_tcp_data*)(scheduler_info->data))->len_buf_out = 0;    
 }
 
 /* Maneja un el intento de conexion de un agente */
@@ -122,19 +124,34 @@ void handle_agent_connect(FdInfo* info) {
 /* Maneja la recepcion de un mensaje de un agente */
 void handle_agent_msg(FdInfo* info) {
     fd_tcp_data* data = (fd_tcp_data*)(info->data);
+    int epollout = 0;
 
+    // Leemos el socket hasta EAGAIN y procesamos los mensajes leidos
     while (1) {
-        int n = read(info->fd, 
-                    data->buf_in + data->len_buf_in,
-                    TAM_BUF - data->len_buf_in);    
+        int n = read(info->fd, data->buf_in + data->len_buf_in,
+                        TAM_BUF - data->len_buf_in);    
         
-        if (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
+        // Si no hay mas datos salimos del loop
+        if (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             break;
+        }
     
-        if (n == -1)
+        // Retornamos en caso de otro error
+        if (n == -1){
+            perror("handle_agent_msg (read)");
             return;
+        }
 
-        /* Actualizamos el tamano */
+        // Verificamos si el agente cerro la conexion
+        if (n == 0) {
+            reservation_manager_release_by_socket(info->fd);
+            close(info->fd);
+            fd_info_destr(info);
+            printf("handle_agent_connect (agent closed connection)");
+            return;
+        }
+
+        // Actualizamos la longitud del buffer
         data->len_buf_in += n;
 
         while (1) {
@@ -149,21 +166,23 @@ void handle_agent_msg(FdInfo* info) {
             char res[MAX_BYTES_NAME_RESOURCE];
             int amount;
             *end_of_command = '\0';
-            if (parse_node_command(data->buf_in, command_name, &job_id, res, &amount) == -1)
-                return;
-    
+
+            if (parse_node_command(data->buf_in, command_name, &job_id, res, &amount) == -1) {
+                perror("handle_agent_msg (invalid request)");
+                break;
+            }
+            
+            // Gestionamos un comando completo
             char reply[TAM_BUF];
             int len;
-            unsigned short nlen;
-    
             if (strcmp(command_name, "RESERVE") == 0) {
-                printf("Me pedi a mi mismo el trabajo\n");
                 /* Intentamos reservar. */
                 switch (local_resources_reserve(job_id, info->fd, res, amount)) {
                     case -1: // Resource/amount invalido
                         // Le respondemos DENIED <job_id>
                         len = sprintf(reply, "DENIED %d\n", job_id);
-                        send_msg_tcp(info->fd, reply, len, info);
+                        add_to_buffer(info, reply, len);
+                        epollout = 1;
                         break;
     
                     case 1: // Cantidad no disponible (lo encola)
@@ -176,45 +195,41 @@ void handle_agent_msg(FdInfo* info) {
     
                         // Le respondemos GRANTED <job_id>
                         len = sprintf(reply, "GRANTED %d\n", job_id);
-                        send_msg_tcp(info->fd, reply, len, info);
+                        add_to_buffer(info, reply, len);
+                        epollout = 1;
                         break;
                 }
             }
-    
             else if (strcmp(command_name, "GRANTED") == 0) {
                 char src_ip[INET_ADDRSTRLEN];
                 agent_manager_get_ip_by_fd(info->fd, src_ip);
                 job_set_granted(job_id, src_ip, 1);
-                if (job_check_granted(job_id)) {
-                    // Le avisamos al scheduler
+
+                // Si todos los pedidos fueron concedidos le
+                // avisamos al scheduler
+                if (job_check_granted(job_id)) { 
                     len = sprintf(reply, "JOB_GRANTED %d", job_id);
-                    nlen = htons(len);
-                    if (send_msg_tcp(scheduler_fd, (char*)&nlen,
-                                        NBYTES_PACKET_ERL,
-                                        scheduler_info)
-                        == -1)
-                        return;
-                    if (send_msg_tcp(scheduler_fd, reply, len,
-                                        scheduler_info) == -1)
-                        return;
+
+                    unsigned short nlen = htons(len);
+                    add_to_buffer(scheduler_info, (char*)&nlen, NBYTES_PACKET_ERL);
+
+                    add_to_buffer(scheduler_info, reply, len);
                 }
-    
             }
             else if (strcmp(command_name, "RELEASE") == 0) {
                 local_resources_release(job_id, info->fd, res, amount);
             }
             else if (strcmp(command_name, "DENIED") == 0) {
-                    // Le avisamos al scheduler
-                    len = sprintf(reply, "JOB_DENIED %d", job_id);
-                    nlen = htons(len);
-                    if (send_msg_tcp(scheduler_fd, (char*)&nlen,
-                                        NBYTES_PACKET_ERL,
-                                        scheduler_info)
-                        == -1)
-                        return;
-                    if (send_msg_tcp(scheduler_fd, reply, len,
-                                        scheduler_info) == -1)
-                        return;
+                // Le avisamos al scheduler
+                len = sprintf(reply, "JOB_DENIED %d", job_id);
+
+                unsigned short nlen = htons(len);
+                add_to_buffer(scheduler_info, (char*)&nlen, NBYTES_PACKET_ERL);
+
+                add_to_buffer(scheduler_info, reply, len);
+            }
+            else {
+                printf("handle_agent_msg (invalid command in request)\n");
             }
 
             /* Actualizamos el buffer */
@@ -226,6 +241,10 @@ void handle_agent_msg(FdInfo* info) {
 
     /* Volvemos a agregar el fd a la instancia epoll */
     struct epoll_event ev;
+    if (epollout == 1) {
+        ev.events = EPOLLIN | EPOLLHUP | EPOLLERR |
+                    EPOLLET | EPOLLONESHOT | EPOLLOUT;    
+    }
     ev.events = EPOLLIN | EPOLLHUP | EPOLLERR |
                 EPOLLET | EPOLLONESHOT;
     ev.data.ptr = info;
@@ -234,6 +253,7 @@ void handle_agent_msg(FdInfo* info) {
 
 /* Maneja la desconexion inesperada de un agente */
 void handle_agent_disconnect(FdInfo* info) {
+    printf("handle_agent_disconnect (agent closed connection)");
     reservation_manager_release_by_socket(info->fd);
     close(info->fd); 
     fd_info_destr(info);
@@ -307,6 +327,7 @@ void handle_announce(FdInfo* info) {
 
 /* Maneja la recepcion de un mensaje del scheduler */
 int handle_scheduler(FdInfo *info) {
+
     fd_tcp_data* data = (fd_tcp_data*)(info->data);
 
     while (1) {
@@ -314,14 +335,25 @@ int handle_scheduler(FdInfo *info) {
                      data->buf_in + data->len_buf_in,
                      TAM_BUF - data->len_buf_in);
 
+        /* Actualizamos el tamano */
+        data->len_buf_in += n;
+
         if (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
             break;
 
         if (n == -1)
             return -1;
 
-        /* Actualizamos el tamano */
-        data->len_buf_in += n;
+        // Verificamos si el scheduler cerro la conexion
+        if (n == 0) {
+            reservation_manager_release_by_socket(info->fd);
+            close(info->fd);
+            fd_info_destr(info);
+            printf("handle_scheduler (scheduler closed connection)");
+            return -1;
+        }
+
+        
         
         while (1) {
             /* Verificamos si llegaron los bytes de la longitud */
@@ -373,7 +405,7 @@ int handle_scheduler(FdInfo *info) {
                     // Verificamos si el host (nodo) esta en la tabla de nodos
                     if (agent_manager_get(host) == NULL) { 
                         // No se encuentra => no se puede mandar "RESERVE ..."
-        
+                        
                         // Le avisamos al scheduler
                         len = sprintf(reply, "JOB_DENIED %s", job_id);
                         nlen = htons(len);
@@ -409,7 +441,7 @@ int handle_scheduler(FdInfo *info) {
                         sock_host = fdinfo_host->fd;
                         len = sprintf(request, "RESERVE %s %s %s\n", 
                                         job_id, res, amount);
-                        send_msg_tcp(sock_host, request, len, info);
+                        send_msg_tcp(sock_host, request, len, fdinfo_host);
                     }
                 }
                 bool result = job_add(atoi(job_id), nreqs, reqs);
@@ -436,13 +468,15 @@ int handle_scheduler(FdInfo *info) {
                 job_release(atoi(job_id));
             }
             else if (strncmp(command, "GET_NODES", strlen("GET_NODES")) == 0) {
+                printf("get_nodes\n");
                 char *buf = agent_manager_get_nodes();
                 len = sprintf(reply, "%s", buf);
+                printf("len=%d, reply=%s\n", len, reply);
                 nlen = htons(len);
-                if (send_msg_tcp(info->fd, (char*)&nlen, NBYTES_PACKET_ERL, info) == -1) {
+                if (send_msg_tcp(scheduler_fd, (char*)&nlen, NBYTES_PACKET_ERL, scheduler_info) == -1) {
                     return -1;
                 }
-                if (send_msg_tcp(info->fd, reply, len, info) == -1) {
+                if (send_msg_tcp(scheduler_fd, reply, len, scheduler_info) == -1) {
                     return -1;
                 }
             }
