@@ -4,7 +4,7 @@
                  
 %Una vez llega a 0, termina.
 generate_jobs(0, _ListMaximos) -> % cuando N es 0, termina
-        ok;
+        pid_scheduler_job ! no_hay_mas_jobs;
 
 %Arma el job con el jobID y la cantidd de recursos q requerira, a que nodo se lo pedira lo manejara el scheduler
 % Envia por mensaje JobID(int), Job(string), CantRecursos(int) al proceso scheduler_job
@@ -60,13 +60,16 @@ generate_jobs(N, ListMaximos) -> %N(int), ListMaximos(lista de 3 enteros)
 % Recibe por mensaje JobID(int), Job(string), CantRecursos(int) y crea SIN LINK un proceso que maneje este job, se vuelve a llamar recursivamente para seguir atendiendo jobs
 % handler_job es creado sin link ya que si muere o le pasa algo a ese job no nos importa queremos seguir atendiendo los proximos.
 % Recibe : JobTimeout(int), Pid_wait_jobs(Pid), Puerto(int)
-scheduler_jobs(JobTimeout, Pid_wait_jobs, Puerto) -> 
-    receive
-        {JobID, Job, CantRecursos} -> %Job = "recurso:cant:recurso:cant"
-            spawn(aux, handler_job, [JobID, Job, CantRecursos, JobTimeout,Pid_wait_jobs, Puerto]), %Recibe el job y crea un proceso q lo maneje,  LE PASAMOS MODULO AUX ESTA AHI LA FUN
-            scheduler_jobs(JobTimeout, Pid_wait_jobs, Puerto)%llama recursivamente scheduler para q siga recibiendo jobs
-    end. 
-    
+scheduler_jobs(JobTimeout, Pid_wait_jobs, Puerto)->
+    case conectar_y_obtener_nodos(Puerto) of %Nos conectamos con el agente y le pedimos la lista de nodos actualizada
+        {ok, Socket, MapNodos} -> %Se pudo conectar, enviar GETNODES y recibir la rta
+            %Como no es un prcoeso nuevo sino una funcion dentro de scheduler jobs, tiene el mismo PID, esta fun recibira los msg q manden los jobs.
+            recibir_jobs_y_armar_peticiones(Socket, MapNodos, JobTimeout, Pid_wait_jobs), %aca se llama recusrivamente hasta q recibe y crea todos los jobs
+        
+        {error, _Reason} -> 
+            {error, Reason} %Error no pudimos conectarnos al socket o recibir msg de este
+        end.
+
 %Crea y linkea el proceso client
 % Recibe: Modo(atomo), N(int), Puerto(int) 
 server(Modo, N, Puerto) ->
@@ -94,6 +97,7 @@ client(Modo, N, Puerto) ->
                 fin ->  ok 
             end,
             ets:delete(pendientes);%liberamos la tabla d procesos pendientes pq ya terminamos
+
         _ -> 
             io:format("Los modos son: manual o random~n"),
             exit({modo_invalido, Modo})

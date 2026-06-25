@@ -1,5 +1,5 @@
 -module(aux).
--export([eliminar_indice/2, inicializar_sistema/2, handler_job/6, wait_jobs/1, supervisor_scheduler_jobs/4]).
+-export([eliminar_indice/2, inicializar_sistema/2, handler_job/7, wait_jobs/1, recibir_jobs_y_armar_peticiones/4, supervisor_scheduler_jobs/4]).
 
 %========= Funciones AUXILIARES  ===============$
 %MapNodos : mapa donde key es el nodo y value lista con 3 enteros, donde cada entero representa en orden la cantidad de CPU, MEM, GPU
@@ -39,10 +39,12 @@ eliminar_indice(N, Lista) ->
 % string:toekns ":" , devuelve una lista con cda elem del nodo, ej [host, puerto, cpu, cntcpu, mem, cntmem, 
 % Recibe: Nodo(string)
 % Retorna: Una tupla de la forma {Host, [CantCPU, CantMem, CantGPU}
-parsear_un_nodo(Nodo) -> %Nodo(string)
-    [Host, _Puerto, "cpu", CantCPU, "mem", CantMEM, "gpu", CantGPU] = string:tokens(Nodo, ":"),%luego aplicamos Patter Matching
-    {Host, [list_to_integer(CantCPU), list_to_integer(CantMEM), list_to_integer(CantGPU)]}.
 
+parsear_un_nodo(Nodo) ->%Nodo(string)
+    [Host, Puerto, "cpu", CantCPU, "mem", CantMEM, "gpu", CantGPU] = string:tokens(Nodo, ":"),
+    {Host ++ ":" ++ Puerto, [list_to_integer(CantCPU), list_to_integer(CantMEM), list_to_integer(CantGPU)]}.    
+
+    
 %A cada nodo que es un string lo transforma en una tupla de la forma {Host, [CantCPU, CantMem, CantGPU}, de esta forma arma una lista con list comprehension
 % y finalmente transforma la lista en un mapa
 % Recibe: ListNodos(lista de strings)
@@ -197,6 +199,21 @@ armar_peticiones(JobID, Job, CantRecursos, MapNodos) -> %%JobID(string), Job(str
 remover_prefijo_nodes("NODES " ++ Resto) -> Resto;
 remover_prefijo_nodes(String) -> String.
 
+%Una vez N es menor o igual a 0, envia un msg al cliente para que termine y cierra el socket
+wait_jobs(N) when N =< 0 ->
+    receive
+        {ok, Socket} ->
+            gen_tcp:close(Socket),
+            cliente_pid ! fin
+    end. 
+
+%Funcion para esperar a que terminen los N jobs.
+% Recibe N(int)
+wait_jobs(N) -> %N(int)
+    receive 
+        {ok, _Socket} ->
+            wait_jobs(N-1)
+        end.
 % Se intenta conectar al socket, si es exitosa, envia GET_NODES para consultar sobre los nodos activos, recibe una lista en binario de estos y crea el mapa con nodos y sus cantidades
 % Recibe: Puerto(int)
 % Retorna {ok, Socket, MapNodos} si fue exitoso, donde Socket(int), MapNodos(mapa donde key es el nodo y value una lista de 3 int donde cada cantidad pertenece a CPU, MEM, GPU en ese orden.)
@@ -238,45 +255,38 @@ procesar_respuesta(JobID, Job, CantRecursos, Socket, Msg_RELEASE, JobTimeout, Pi
                     timer:sleep(2000),
                     io:format("Trabajo finalizado!.~n"),
                     gen_tcp:send(Socket, list_to_binary(Msg_RELEASE)),%mandamos release devolviendo ese job
-                    Pid_wait_jobs ! {ok}; %avisamos q el job termino
+                    Pid_wait_jobs ! {ok, Socket}; %avisamos q el job termino
 
                 "JOB_DENIED " ++ _Rest -> %Nos cancelaron el job, lo borramos de la tabla de pendientes, registramos el log y avisamos que termino el job
                     borrarPendiente_and_registrarLog(JobID, Job, "JOB_DENIED"),
-                    Pid_wait_jobs ! {ok}
+                    Pid_wait_jobs ! {ok, Socket}
             end
     end.
 
-%Con esto, por cada job creado tenemos una conex en simultaneo hablando con el agente C, cada vez que un job termina le avisamos por mensaje a wait_jobs
-% Recibe: JobID(string), Job(string), CantRecursos(int), Pid_wait_jobs(Pid), Puerto(int)
-handler_job(JobID, Job, CantRecursos, JobTimeout, Pid_wait_jobs, Puerto) ->
-    case conectar_y_obtener_nodos(Puerto) of %S la conexion fue exitosa:
-        {ok, Socket, MapNodos} ->
+%Cada vez q recibe un job arma la peticion y crea un proceso (conectado al mismo agente) para q mande y espere la rta del job
+% se llama recursivamente para seguir atendiendo jobs
+recibir_jobs_y_armar_peticiones(Socket, MapNodos, JobTimeout, Pid_wait_jobs) ->
+    receive
+         no_hay_mas_jobs -> 
+            ok;
+
+        {JobID, Job, CantRecursos} -> %Job = "recurso:cant:recurso:cant"
             case armar_peticiones(JobID, Job, CantRecursos, MapNodos) of
                 {error, no_alcanza} -> %Si no pudimos armar las peticiones no alcanzaron los nodos disponibles para la cantidad requerida de algun recurso
-                    Pid_wait_jobs ! {ok},
-                    gen_tcp:close(Socket);
+                    Pid_wait_jobs ! {ok, Socket},
 
                 {Msg_REQUEST, Msg_RELEASE} -> %Si pudimos armarlas, las enviamos al agente e insertamos en la lista de pendientes el job
-                    gen_tcp:send(Socket, list_to_binary(Msg_REQUEST)),
-                    ets:insert(pendientes, {JobID, Job}),
-                    procesar_respuesta(JobID, Job, CantRecursos, Socket, Msg_RELEASE, JobTimeout, Pid_wait_jobs),%Recibe la respuesta de la peticion enviada y maneja que hacer en cada caso.
-                    gen_tcp:close(Socket)%Cerramos el socket
-            end;
-        {error, _Reason} -> %Error no pudimos conectarnos al socket
-            Pid_wait_jobs ! {ok} %Enviamos que el job termino aunque fue con error.
-    end.
+                    spawn(aux, handler_job, [JobID, Job, CantRecursos, JobTimeout,Pid_wait_jobs, Socket, Msg_RELEASE]) %Recibe el job y crea un proceso q lo maneje,  LE PASAMOS MODULO AUX ESTA AHI LA FUN       
+            end,
+    recibir_jobs_y_armar_peticiones(Socket, MapNodos, JobTimeout, Pid_wait_jobs)
+    end.  
 
-%Una vez N es menor o igual a 0, envia un msg al cliente para que termine.
-wait_jobs(N) when N =< 0 ->
-    cliente_pid ! fin; 
+%manda el msg al agente espera su respuesta y la maneja
+handler_job(JobID, Job, CantRecursos, JobTimeout, Pid_wait_jobs, Socket, Msg_RELEASE) ->
+    gen_tcp:send(Socket, list_to_binary(Msg_REQUEST)),
+    ets:insert(pendientes, {JobID, Job}),
+    procesar_respuesta(JobID, Job, CantRecursos, Socket, Msg_RELEASE, JobTimeout, Pid_wait_jobs).
 
-%Funcion para esperar a que terminen los N jobs.
-% Recibe N(int)
-wait_jobs(N) -> %N(int)
-    receive 
-        _ ->
-            wait_jobs(N-1)
-        end.
 
 % Se conecta al socket, obtiene la lista con los nodos disponibles si funciona bien o exit si da error ya que no podemos hacer nada si no obtenemos los nodos disponibles.
 % Recibe: Puerto(int)
