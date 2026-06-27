@@ -1,5 +1,5 @@
 -module(aux).
--export([eliminar_indice/2, inicializar_sistema/2, handler_job/8, wait_jobs/1, recibir_jobs_y_armar_peticiones/4, supervisor_scheduler_jobs/4, conectar_y_obtener_nodos/1, get_map_nodes/1]).
+-export([eliminar_indice/2, inicializar_sistema/2, handler_job/8, wait_jobs/1, recibir_jobs_y_armar_peticiones/4, supervisor_scheduler_jobs/4, conectar_y_obtener_nodos/1, get_map_nodes/1, tcp_deliver/2]).
 
 %========= Funciones AUXILIARES  ===============$
 %MapNodos : mapa donde key es el nodo y value lista con 3 enteros, donde cada entero representa en orden la cantidad de CPU, MEM, GPU
@@ -243,35 +243,37 @@ conectar_y_obtener_nodos(Puerto) ->
 %Recibe la respuesta de la peticion del job enviado y maneja que hacer en cada caso, cuando termina un job, lo elimina de la tabla de Pendientes, registra su log y envia -
 %- msg a wait_jobs avisando que termino.
 % Recibe: JobID(string), Job(string), CantRecursos(int), Scoket(int), Msg_Release(string), JobTimeuot(int en milisegundos), Pid_wait_jobs(Pid).
-procesar_respuesta(JobID, Job, CantRecursos, Socket, Msg_RELEASE, JobTimeout, Pid_wait_jobs) ->
-    case gen_tcp:recv(Socket, 0, JobTimeout) of 
-    
-        {error, timeout} -> %aca fue job timeout, recibiste un recurso(o no) pero esperaste mucho para otro(o para tu primer) entonces dio error timeout la fun tcp rcv
-            borrarPendiente_and_registrarLog(JobID, Job, "POSIBLE DEADLOCK"),
-            gen_tcp:send(Socket, list_to_binary(Msg_RELEASE)), %mandamos release devolviendo ese job
-            pid_scheduler_job ! {JobID, Job, CantRecursos}; %lo mandamos d vuelta al buzon del receive para q desp intente d nuevo
-            %Aca no mandamos ok al wait jobs pq todavia no termino este job
-            
-        {ok, Bin} -> %Si no dio error de timeout
+% (!) _CantRecursos no se usa momentaneamente porque no tenemos buzon para volver a mandar ante timeout
+procesar_respuesta(JobID, Job, _CantRecursos, Socket, Msg_RELEASE, JobTimeout, Pid_wait_jobs) ->
+    receive 
+        {tcp_msg, Bin} -> 
             case binary_to_list(Bin) of
-                "JOB_GRANTED " ++ _Rest -> %Si nos dieron los recursos, simulamos el job y devolvemos
+                "JOB_GRANTED " ++ _Rest -> 
                     borrarPendiente_and_registrarLog(JobID, Job, "JOB_GRANTED"),
                     io:format("Simulando trabajo. . .~n"),
                     timer:sleep(2000),
                     io:format("Trabajo finalizado!.~n"),
-                    gen_tcp:send(Socket, list_to_binary(Msg_RELEASE)),%mandamos release devolviendo ese job
-                    Pid_wait_jobs ! {ok, Socket}; %avisamos q el job termino
+                    gen_tcp:send(Socket, list_to_binary(Msg_RELEASE)),
+                    Pid_wait_jobs ! {ok, Socket};
 
-                "JOB_DENIED " ++ _Rest -> %Nos cancelaron el job, lo borramos de la tabla de pendientes, registramos el log y avisamos que termino el job
+                "JOB_DENIED " ++ _Rest -> 
                     borrarPendiente_and_registrarLog(JobID, Job, "JOB_DENIED"),
+                    Pid_wait_jobs ! {ok, Socket};
+                
+                Invalido ->
+                    io:format("Formato de mensaje no esperado por el handler: ~p~n", [Invalido]),
                     Pid_wait_jobs ! {ok, Socket}
             end
+    after JobTimeout -> 
+        borrarPendiente_and_registrarLog(JobID, Job, "POSIBLE DEADLOCK"),
+        gen_tcp:send(Socket, list_to_binary(Msg_RELEASE))
+        % volver mandar al buzon
+        % pid_scheduler_job ! {JobID, Job, CantRecursos}
     end.
 
 %Cada vez q recibe un job arma la peticion y crea un proceso (conectado al mismo agente) para q mande y espere la rta del job
 % se llama recursivamente para seguir atendiendo jobs
 recibir_jobs_y_armar_peticiones(Socket, MapNodos, JobTimeout, Pid_wait_jobs) ->
-    io:format("WTF ~n"),
     receive
          no_hay_mas_jobs -> 
             ok;
@@ -281,9 +283,7 @@ recibir_jobs_y_armar_peticiones(Socket, MapNodos, JobTimeout, Pid_wait_jobs) ->
                 {error, no_alcanza} -> %Si no pudimos armar las peticiones no alcanzaron los nodos disponibles para la cantidad requerida de algun recurso
                     Pid_wait_jobs ! {ok, Socket};
 
-                {Msg_REQUEST, Msg_RELEASE} -> %Si pudimos armarlas, las enviamos al agente e insertamos en la lista de pendientes el job
-                    io:format("~p ~n", [Msg_REQUEST]),
-                    
+                {Msg_REQUEST, Msg_RELEASE} -> %Si pudimos armarlas, las enviamos al agente e insertamos en la lista de pendientes el job                    
                     spawn(aux, handler_job, [JobID, Job, CantRecursos, JobTimeout,Pid_wait_jobs, Socket, Msg_REQUEST, Msg_RELEASE]) %Recibe el job y crea un proceso q lo maneje,  LE PASAMOS MODULO AUX ESTA AHI LA FUN       
             end,
     recibir_jobs_y_armar_peticiones(Socket, MapNodos, JobTimeout, Pid_wait_jobs)
@@ -292,30 +292,39 @@ recibir_jobs_y_armar_peticiones(Socket, MapNodos, JobTimeout, Pid_wait_jobs) ->
 %manda el msg al agente espera su respuesta y la maneja
 handler_job(JobID, Job, CantRecursos, JobTimeout, Pid_wait_jobs, Socket, Msg_REQUEST, Msg_RELEASE) ->
     gen_tcp:send(Socket, list_to_binary(Msg_REQUEST)),
-    ets:insert(pendientes, {JobID, Job}),
+    ets:insert(pendientes, {JobID, Job, self()}),
     procesar_respuesta(JobID, Job, CantRecursos, Socket, Msg_RELEASE, JobTimeout, Pid_wait_jobs).
 
 
-% Se conecta al socket, obtiene la lista con los nodos disponibles si funciona bien o exit si da error ya que no podemos hacer nada si no obtenemos los nodos disponibles.
-% Recibe: Puerto(int)
-% Retorna {ok, BinList} en caso de conexion y recibimiento exitoso, donde BinList es una lista en binario de los nodos activos disponibles con sus cantidades.
-% Retorna {error, Reason} en caso de conexion erronea, al conectarse o al hacer el recv
-% get_nodes_or_exit(Puerto)-> %packet, 2 lo q hace es q en los primeros 2 bytes pone la longitud y en lo qsigue el msg
-%     case  gen_tcp:connect("localhost", Puerto, [binary, {packet, 2}, {active, false}]) of %envio para conectarme al puerto 8100, si es exitosa devuelve ok socket
-%         {ok, Socket} ->
-%             gen_tcp:send(Socket, <<"GET_NODES">>), %consulto con el agente C respondera con una lista con los nodos disponoinbiles, necesito esto para armar listMax para generar los jobs
-%             % EJ: NODES 192.168.1.10:8100:cpu:4:mem:8192:gpu:1 ; 192.168.1.11:8101:cpu:2:mem:4096
-%             case gen_tcp:recv(Socket, 0) of
-%                 {ok, BinList} -> 
-%                     % gen_tcp:close(Socket),
-%                     {ok, BinList, Socket};
-%                 {error, Reason} ->
-%                     % gen_tcp:close(Socket),
-%                     exit({error_al_recibir_get_nodes, Reason}) %por mas q diga lista lor recibo como un binario q luego transformo a string
-%             end;
-%         {error, Reason} ->
-%             exit({error_al_conectar, Reason})
-%     end.
+% Reparte los tcp que llegan desde el agente C a los procesos erlang
+tcp_deliver(Socket, JobTimeout) ->
+    case gen_tcp:recv(Socket, 0) of
+        {ok, Bin} -> 
+            Str = binary_to_list(Bin),
+            % Parseamos el comando para extraer el JobID. 
+            % Ejemplos esperados de C: "JOB_GRANTED 145" o "JOB_DENIED 8"
+            case string:tokens(Str, " ") of
+                [_Comando, JobID | _Resto] ->
+                    % Buscamos el PID del handler_job asignado en la tabla ETS
+                    case ets:lookup(pendientes, JobID) of
+                        [{JobID, _Job, PidHandler}] ->
+                            % Le enviamos el mensaje de forma segura al handler_job que lo espera
+                            PidHandler ! {tcp_msg, Bin};
+                        [] ->
+                            io:format("[tcp_deliver] Alerta: Llego respuesta para JobID ~s pero no hay proceso pendiente.~n", [JobID])
+                    end;
+                _ ->
+                    io:format("[tcp_deliver] Error: Estructura de paquete invalida desde el agente: ~p~n", [Str])
+            end,
+            % Seguimos escuchando el socket de forma infinita
+            tcp_deliver(Socket, JobTimeout);
+
+        {error, closed} ->
+            io:format("[tcp_deliver] Conexion cerrada por el agente.~n");
+        {error, Reason} ->
+            io:format("[tcp_deliver] Error en lectura de Socket: ~p~n", [Reason])
+    end. 
+
 
 % Crea el proceso scheduler_jobs, si este muere captura el error y se encarga de volver a levantarlo.
 % Recibe: JobTimeout(int en milisegundos), Pid_wait_jobs(Pid), Puerto(int)
@@ -354,14 +363,12 @@ get_max_resources(Socket) ->
 
 % Devuelve un mapa de nodos
 get_map_nodes(Socket) ->
-    io:format("get_map_nodes ~p ~n", [Socket]),
     case gen_tcp:send(Socket, <<"GET_NODES">>) of 
         ok -> ok;
         {error, RazonDeSer} -> exit({error_send_get_map_nodes, RazonDeSer})
     end,
     case gen_tcp:recv(Socket, 0) of 
         {ok, BinList} -> 
-            io:format("Bing chilling ~n"),
             ListStr = binary_to_list(BinList),
             ListSinPrefijo = remover_prefijo_nodes(ListStr),
             List_nodos_separados = string:split(ListSinPrefijo, ";", all),
@@ -369,7 +376,6 @@ get_map_nodes(Socket) ->
             {ok, MapNodos};
 
         {error, Reason} ->
-            io:format("Salio mal ~n"),
             exit({error_get_map_nodes, Reason})
     end.
 
@@ -377,10 +383,21 @@ get_map_nodes(Socket) ->
 % Recibe: N(cantidad de jobs a crear), Puerto(int)
 % Retorna: ListMaximos(lista de 3 int, formada por la suma de la cantidad de ese recurso entre todos los nodos disponibles, donde el orden de las cantidades es CPU, MEM, GPU.)
 inicializar_sistema(N, Puerto) -> 
+
+    % Nos conectamos al agente de C
     {ok, Socket} = connect_agent(Puerto),
+    
+    % Obtenemos por unica vez la cantidad maxima de recursos 
+    % (esto esta dudoso por el tema del tiempo y de la actualizacion de las tablas, quiza
+    % podriamos llamar a una funcion get_resources_available() cada vez que estemos por generar
+    % algo pero en realidad creo que esto va hacer race condition con el tcp_deliver y 
+    % probablemente terminemos pidiendo recursos full random desconociendo la capacidad total
     ListMaximos = get_max_resources(Socket),
 
+    % Activamos el tcp deliver
     JobTimeout = 10000,
+    spawn_link(fun() -> tcp_deliver(Socket, JobTimeout) end),
+
     ets:new(pendientes, [named_table, public, set]),
     Pid_wait_jobs = spawn_link(?MODULE, wait_jobs, [N]), 
     spawn_link(?MODULE, supervisor_scheduler_jobs, [JobTimeout, Pid_wait_jobs, Socket, self()]),

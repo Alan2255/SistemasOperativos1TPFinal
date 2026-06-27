@@ -13,9 +13,11 @@ int parse_node_command(char *str, char *command_name, int *job_id, char *res, in
     if (count_tokens < 2)
         return -1;
 
-    // Copiamos el nombre del comando y job id
-    strncpy(command_name, tokens[0], MAX_LEN_COMMAND_AGENT - 1);
-    command_name[MAX_LEN_COMMAND_AGENT - 1] = '\0';
+    // Nombre del comando
+    snprintf(command_name, MAX_LEN_COMMAND_AGENT, "%s", tokens[0]);
+    printf("COMMAND_NAME PARSER BEFORE1 [%s]\n",command_name); 
+
+    // Job id
     *job_id = atoi(tokens[1]);
 
     if (strcmp(command_name, "GRANTED") == 0 
@@ -30,10 +32,10 @@ int parse_node_command(char *str, char *command_name, int *job_id, char *res, in
         // Verificamos formato
         if (count_tokens != 4)
             return -1;
-
-        // Copiamos el recurso y monto
-        strncpy(res, tokens[2], MAX_BYTES_NAME_RESOURCE - 1);
-        res[MAX_BYTES_NAME_RESOURCE - 1] = '\0';
+        
+        printf("COMMAND_NAME PARSER BEFORE2 [%s]\n",command_name); 
+        snprintf(res, MAX_BYTES_NAME_RESOURCE, "%s", tokens[2]);
+        printf("COMMAND_NAME PARSER AFTER [%s]\n",command_name); 
         *amount = atoi(tokens[3]);
     }
     else 

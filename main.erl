@@ -62,7 +62,6 @@ generate_jobs(N, ListMaximos) ->
 % Recibe : JobTimeout(int), Pid_wait_jobs(Pid), Puerto(int)
 scheduler_jobs(JobTimeout, Pid_wait_jobs, Socket)->
     {ok, MapNodos} = aux:get_map_nodes(Socket),
-    io:format("Que esta pasando aca ~n"),
     aux:recibir_jobs_y_armar_peticiones(Socket, MapNodos, JobTimeout, Pid_wait_jobs).
 
 %Crea y linkea el proceso client

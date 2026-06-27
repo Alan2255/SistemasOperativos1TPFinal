@@ -141,20 +141,19 @@ void handle_agent_msg(FdInfo* info) {
     // Leemos el socket hasta EAGAIN y procesamos los mensajes leidos
     while (1) {
         int n = read(info->fd, data->buf_in + data->len_buf_in,
-                        TAM_BUF - data->len_buf_in);    
+                        TAM_BUF - data->len_buf_in - 1); // -1 para asegurar espacio del \0   
         
         if (n == -1) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) { // Si no hay mas datos salimos del loop
-                printf("handle_agent_msg: No hay mas datos en el socket.\n");
+            if (errno == EAGAIN || errno == EWOULDBLOCK) { 
                 break;
             }
-            else { // Ocurrio otro error
+            else { 
                 perror("handle_agent_msg");
                 pthread_mutex_unlock(&data->mutex_in);
                 return;
             }
         }
-        else if (n == 0) { // El agente cerro la conexion
+        else if (n == 0) { 
             reservation_manager_release_by_socket(info->fd);
             close(info->fd);
             fd_info_destr(info);
@@ -163,102 +162,104 @@ void handle_agent_msg(FdInfo* info) {
             return;
         }
 
-        // Actualizamos la longitud del buffer
         data->len_buf_in += n;
         data->buf_in[data->len_buf_in] = '\0';
-        printf("No se que es esto [%s] \n", data->buf_in);
+        printf("Buffer crudo recibido: [%s]\n", data->buf_in);
 
+        // --- SOLUCIÓN DEPROCESAMIENTO PORLÍNEAS SEGURO ---
+        char* read_ptr = data->buf_in;
+        
         while (1) {
-            /* Comprobamos si esta el comando completo (terminado en '\n'). */
-            char* end_of_command = memchr(data->buf_in, '\n', data->len_buf_in);
-            if (end_of_command == NULL) 
+            // Buscamos el siguiente '\n' a partir de donde quedamos
+            char* end_of_command = strchr(read_ptr, '\n');
+            if (end_of_command == NULL) {
+                // No hay más mensajes completos en esta ráfaga
                 break;
+            }
             
-            /* Si esta, lo parseamos y realizamos la accion correspondiente. */ 
+            // Delimitamos el string reemplazando el '\n' por '\0'
+            *end_of_command = '\0';
+
+            /* Parseamos el comando usando la posición actual de lectura */
             char command_name[MAX_LEN_COMMAND_AGENT];
             int job_id;
             char res[MAX_BYTES_NAME_RESOURCE];
             int amount;
-            *end_of_command = '\0';
 
-            if (parse_node_command(data->buf_in, command_name, &job_id, res, &amount) == -1) {
-                printf("handle_agent_msg (invalid request).\n");
-                break;
-            }
-            
-            // Gestionamos un comando completo
-            char reply[TAM_BUF];
-            int len;
-            if (strcmp(command_name, "RESERVE") == 0) {
-                printf("RESERVE \n");
-                /* Intentamos reservar. */
-                switch (local_resources_reserve(job_id, info->fd, res, amount)) {
-                    case -1: // Resource/amount invalido
-                        // Le respondemos DENIED <job_id>
-                        len = sprintf(reply, "DENIED %d\n", job_id);
-                        printf("DENIED \n");
-                        send_msg(info, reply, len);
-                        break;
-    
-                    case 1: // Cantidad no disponible (lo encola)
-                        reservation_manager_add(job_id, info->fd, res, amount, 0);
-                        break;
-    
-                    case 0: // Concedido
-                        // Agregamos a la tabla de reservas locales
-                        reservation_manager_add(job_id, info->fd, res, amount, 1);
-    
-                        // Le respondemos GRANTED <job_id>
-                        len = sprintf(reply, "GRANTED %d\n", job_id);
-                        send_msg(info, reply, len);
-                        break;
+            if (parse_node_command(read_ptr, command_name, &job_id, res, &amount) != -1) {
+                
+                // --- LÓGICA DE NEGOCIO (IGUAL A LA TUYA) ---
+                char reply[TAM_BUF];
+                int len;
+                printf("COMMAND_NAME HANDLER [%s]\n",command_name);
+                printf("RESOURCE HANDLER [%s]\n",res);
+                if (strcmp(command_name, "RESERVE") == 0) {
+                    printf("Procesando RESERVE para Job %d\n", job_id);
+                    switch (local_resources_reserve(job_id, info->fd, res, amount)) {
+                        case -1:
+                            len = sprintf(reply, "DENIED %d\n", job_id);
+                            send_msg(info, reply, len);
+                            break;
+                        case 1:
+                            reservation_manager_add(job_id, info->fd, res, amount, 0);
+                            break;
+                        case 0:
+                            reservation_manager_add(job_id, info->fd, res, amount, 1);
+                            len = sprintf(reply, "GRANTED %d\n", job_id);
+                            send_msg(info, reply, len);
+                            break;
+                    }
                 }
-            }
-            else if (strcmp(command_name, "GRANTED") == 0) {
-                printf("Soy re yo ameooo\n");
-                char ip[INET_ADDRSTRLEN];
-                char port[PORTSTRLEN];
-                agent_manager_get_addr_by_fd(info->fd, ip, port);
-                job_set_granted(job_id, ip, port, 1);
+                else if (strcmp(command_name, "GRANTED") == 0) {
+                    char ip[INET_ADDRSTRLEN];
+                    char port[PORTSTRLEN];
+                    agent_manager_get_addr_by_fd(info->fd, ip, port);
+                    job_set_granted(job_id, ip, port, 1);
 
-                // Si todos los pedidos fueron concedidos le
-                // avisamos al scheduler
-                if (job_check_granted(job_id)) { 
-                    printf("Entre al if\n");
-                    len = sprintf(reply, "JOB_GRANTED %d", job_id);
+                    if (job_check_granted(job_id)) { 
+                        len = sprintf(reply, "JOB_GRANTED %d", job_id);
+                        unsigned short nlen = htons(len);
+                        send_msg(scheduler_info, (char*)&nlen, NBYTES_PACKET_ERL);
+                        send_msg(scheduler_info, reply, len);
+                    }
+                }
+                else if (strcmp(command_name, "RELEASE") == 0) {
+                    local_resources_release(job_id, info->fd, res, amount);
+                    reservation_manager_release(job_id);
+                }
+                else if (strcmp(command_name, "DENIED") == 0) {
+                    len = sprintf(reply, "JOB_DENIED %d", job_id);
                     unsigned short nlen = htons(len);
-
                     send_msg(scheduler_info, (char*)&nlen, NBYTES_PACKET_ERL);
                     send_msg(scheduler_info, reply, len);
+                    job_release(job_id);
                 }
-            }
-            else if (strcmp(command_name, "RELEASE") == 0) {
-                local_resources_release(job_id, info->fd, res, amount);
-                reservation_manager_release(job_id);
-            }
-            else if (strcmp(command_name, "DENIED") == 0) {
-                // Le avisamos al scheduler
-                len = sprintf(reply, "JOB_DENIED %d", job_id);
-                unsigned short nlen = htons(len);
-                
-                send_msg(scheduler_info, (char*)&nlen, NBYTES_PACKET_ERL);
-                send_msg(scheduler_info, reply, len);
-
-                job_release(job_id);
-            }
-            else {
-                printf("handle_agent_msg: invalid command in request.\n");
+            } else {
+                printf("handle_agent_msg (invalid request: %s).\n", read_ptr);
             }
 
-            /* Actualizamos el buffer */
-            int len_command = end_of_command - data->buf_in;
-            memmove(data->buf_in, end_of_command+1, data->len_buf_in - (len_command + 1));
-            data->len_buf_in = data->len_buf_in - (len_command + 1);
+            // Avanzamos el puntero de lectura al siguiente caracter después del '\n'
+            read_ptr = end_of_command + 1;
+        }
+
+        /* --- AQUÍ REINICIAMOS EL BUFFER --- */
+        int bytes_procesados = read_ptr - data->buf_in;
+        
+        if (bytes_procesados >= data->len_buf_in) {
+            // Si procesamos todo hasta el final (terminó en \n), RESETEAMOS A 0
+            data->len_buf_in = 0;
+            data->buf_in[0] = '\0';
+            printf("Buffer completamente procesado y reseteado a 0.\n");
+        } else if (bytes_procesados > 0) {
+            // Si quedó un mensaje a la mitad (no alcanzó a tener \n), nos traemos solo ese pedazo al inicio
+            memmove(data->buf_in, read_ptr, data->len_buf_in - bytes_procesados);
+            data->len_buf_in -= bytes_procesados;
+            data->buf_in[data->len_buf_in] = '\0';
+            printf("Mensaje incompleto remanente. Nuevo len_buf_in = %d\n", data->len_buf_in);
         }
     }
     
     pthread_mutex_unlock(&data->mutex_in);
-
 }
 
 /* Maneja la desconexion inesperada de un agente */
@@ -467,7 +468,7 @@ int handle_scheduler(FdInfo *info) {
         
                         // Establecida la conexion mandamos el pedido
                         agent_sock = agent_fdinfo->fd;
-                        len = sprintf(request, "RESERVE %s %s %s", job_id, res, amount);
+                        len = sprintf(request, "RESERVE %s %s %s\n", job_id, res, amount);
                         send_msg(agent_fdinfo, request, len);
                         printf("%s.\n", request);
 
