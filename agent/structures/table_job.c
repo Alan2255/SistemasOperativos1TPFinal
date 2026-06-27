@@ -94,12 +94,14 @@ int job_check_granted(int job_id) {
 }
 
 // Marca el pedido del job correspondiente a 'ip' como 'val'
-bool job_set_granted(int job_id, char* ip, int val) {
+bool job_set_granted(int job_id, char* ip, char* port, int val) {
     job_table_t* job = (job_table_t*)job_get(job_id);
     if (!job || !ip) return false;
 
     for (int i = 0; i < job->nreqs; i++) {
-        if (strncmp(job->reqs[i].dest_ip, ip, INET_ADDRSTRLEN) == 0) {
+        int same_ip = strncmp(job->reqs[i].dest_ip, ip, INET_ADDRSTRLEN) == 0;
+        int same_port = strncmp(job->reqs[i].dest_port, port, PORTSTRLEN) == 0;
+        if (same_ip && same_port) {
             job->reqs[i].granted = val;
             return true;
         }
