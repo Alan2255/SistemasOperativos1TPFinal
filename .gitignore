@@ -1,4 +1,5 @@
 *.beam
 *.log
 *.out
+*.dump
 agent
