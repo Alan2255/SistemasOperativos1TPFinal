@@ -6,7 +6,7 @@
 generate_jobs(0, _ListMaximos) -> % cuando N es 0, termina
         pid_scheduler_job ! no_hay_mas_jobs;
 
-%Arma el job con el jobID y la cantidd de recursos q requerira, a que nodo se lo pedira lo manejara el scheduler
+% Arma el job con el jobID y la cantidd de recursos q requerira, a que nodo se lo pedira lo manejara el scheduler
 % Envia por mensaje JobID(int), Job(string), CantRecursos(int) al proceso scheduler_job
 % Recibe: N(int), ListMaximos(lista de 3 enteros)
 generate_jobs(N, ListMaximos) -> 
@@ -16,7 +16,7 @@ generate_jobs(N, ListMaximos) ->
     ListRecursos = ["cpu", "mem", "gpu"],
 
     Eleccion_recursos = rand:uniform(3), %random entre 1 y N (inclusive), elije cuantos recursos va a pedir
-    
+
     case Eleccion_recursos of
         1 ->
             Indice_recurso = rand:uniform(3),
@@ -31,7 +31,7 @@ generate_jobs(N, ListMaximos) ->
             Recurso_ignorar = lists:nth(Indice_ignorar, ListRecursos),
 
             Recursos_elegidos = [R || R <- ListRecursos, R =/= Recurso_ignorar], %devuelve una lista sin el recurso ignorado
-            Cant_elegidas = aux:delete_index(Indice_ignorar, ListMaximos), %lo hacemos asi pq de otra maner apodrias tener misma cant y no saber cual eliminar
+            Cant_elegidas = aux:eliminar_indice(Indice_ignorar, ListMaximos), %lo hacemos asi pq de otra maner apodrias tener misma cant y no saber cual eliminar
 
             [Recurso1, Recurso2] = Recursos_elegidos,
             [Cant1, Cant2] = Cant_elegidas,
@@ -60,15 +60,10 @@ generate_jobs(N, ListMaximos) ->
 % Recibe por mensaje JobID(int), Job(string), CantRecursos(int) y crea SIN LINK un proceso que maneje este job, se vuelve a llamar recursivamente para seguir atendiendo jobs
 % handler_job es creado sin link ya que si muere o le pasa algo a ese job no nos importa queremos seguir atendiendo los proximos.
 % Recibe : JobTimeout(int), Pid_wait_jobs(Pid), Puerto(int)
-scheduler_jobs(JobTimeout, Pid_wait_jobs, Puerto)->
-    case connect_and_obtain_nodes(Puerto) of %Nos conectamos con el agente y le pedimos la lista de nodos actualizada
-        {ok, Socket, MapNodos} -> %Se pudo conectar, enviar GETNODES y recibir la rta con exito
-            %Como no es un prcoeso nuevo sino una funcion dentro de scheduler jobs, tiene el mismo PID, esta fun recibira los msg q manden los jobs.
-            receive_jobs_and_create_request(Socket, MapNodos, JobTimeout, Pid_wait_jobs), %aca se llama recusrivamente hasta q recibe y crea todos los jobs
-        
-        {error, _Reason} -> 
-            {error, Reason} %Error no pudimos conectarnos al socket o recibir msg de este
-        end.
+scheduler_jobs(JobTimeout, Pid_wait_jobs, Socket)->
+    {ok, MapNodos} = aux:get_map_nodes(Socket),
+    io:format("Que esta pasando aca ~n"),
+    aux:recibir_jobs_y_armar_peticiones(Socket, MapNodos, JobTimeout, Pid_wait_jobs).
 
 %Crea y linkea el proceso client
 % Recibe: Modo(atomo), N(int), Puerto(int) 
@@ -80,7 +75,7 @@ server(Modo, N, Puerto) ->
 %Inicializa el sistema y manda a generar los N jobs y espera a q terminen
 % Recibe: Modo(atomo), N(int), Puerto(int) 
 client(Modo, N, Puerto) ->
-    ListMaximos = aux:start_system(N, Puerto), %Inicializar sistema, y retorna una list de 3 int con los valores maximos d cada recurso
+    ListMaximos = aux:inicializar_sistema(N, Puerto), %Inicializar sistema, y retorna una list de 3 int con los valores maximos d cada recurso
     case Modo of
         random ->
             generate_jobs(N, ListMaximos), %generara N jobs q se los enviara a scheduler de jobs

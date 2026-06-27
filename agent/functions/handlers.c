@@ -71,9 +71,7 @@ void handle_listen_scheduler(FdInfo* info) {
     if (scheduler_fd == -1)
         return;
 
-    scheduler_info = epoll_add(scheduler_fd, FD_SCHEDULER, 
-                                EPOLLIN | EPOLLHUP | EPOLLERR |
-                                EPOLLET | EPOLLONESHOT, NULL);
+    scheduler_info = epoll_add(scheduler_fd, FD_SCHEDULER, EPOLLIN | EPOLLET , NULL);
     if(scheduler_info == NULL) {
         close(scheduler_fd);
         return;
@@ -167,6 +165,8 @@ void handle_agent_msg(FdInfo* info) {
 
         // Actualizamos la longitud del buffer
         data->len_buf_in += n;
+        data->buf_in[data->len_buf_in] = '\0';
+        printf("No se que es esto [%s] \n", data->buf_in);
 
         while (1) {
             /* Comprobamos si esta el comando completo (terminado en '\n'). */
@@ -190,11 +190,13 @@ void handle_agent_msg(FdInfo* info) {
             char reply[TAM_BUF];
             int len;
             if (strcmp(command_name, "RESERVE") == 0) {
+                printf("RESERVE \n");
                 /* Intentamos reservar. */
                 switch (local_resources_reserve(job_id, info->fd, res, amount)) {
                     case -1: // Resource/amount invalido
                         // Le respondemos DENIED <job_id>
                         len = sprintf(reply, "DENIED %d\n", job_id);
+                        printf("DENIED \n");
                         send_msg(info, reply, len);
                         break;
     
@@ -213,6 +215,7 @@ void handle_agent_msg(FdInfo* info) {
                 }
             }
             else if (strcmp(command_name, "GRANTED") == 0) {
+                printf("Soy re yo ameooo\n");
                 char ip[INET_ADDRSTRLEN];
                 char port[PORTSTRLEN];
                 agent_manager_get_addr_by_fd(info->fd, ip, port);
@@ -221,6 +224,7 @@ void handle_agent_msg(FdInfo* info) {
                 // Si todos los pedidos fueron concedidos le
                 // avisamos al scheduler
                 if (job_check_granted(job_id)) { 
+                    printf("Entre al if\n");
                     len = sprintf(reply, "JOB_GRANTED %d", job_id);
                     unsigned short nlen = htons(len);
 
@@ -249,9 +253,10 @@ void handle_agent_msg(FdInfo* info) {
             /* Actualizamos el buffer */
             int len_command = end_of_command - data->buf_in;
             memmove(data->buf_in, end_of_command+1, data->len_buf_in - (len_command + 1));
-            data->len_buf_in -= len_command + 1;
+            data->len_buf_in = data->len_buf_in - (len_command + 1);
         }
     }
+    
     pthread_mutex_unlock(&data->mutex_in);
 
 }
@@ -440,6 +445,7 @@ int handle_scheduler(FdInfo *info) {
                         break;
                     }
                     else { // Se encuentra
+                        printf("Si se encuentra el agente %s:%s.\n", ip, port);
                         agent_fdinfo = agent_manager_get_fdinfo(ip, port);
 
                         if (agent_fdinfo == NULL) { // Pero no se establecio conexion
@@ -461,8 +467,10 @@ int handle_scheduler(FdInfo *info) {
         
                         // Establecida la conexion mandamos el pedido
                         agent_sock = agent_fdinfo->fd;
-                        len = sprintf(request, "RESERVE %s %s %s\n", job_id, res, amount);
+                        len = sprintf(request, "RESERVE %s %s %s", job_id, res, amount);
                         send_msg(agent_fdinfo, request, len);
+                        printf("%s.\n", request);
+
 
                         // Guardamos el pedido para agregarlo a la tabla de jobs
                         strncpy(reqs[nreqs].dest_ip, ip, INET_ADDRSTRLEN - 1);
