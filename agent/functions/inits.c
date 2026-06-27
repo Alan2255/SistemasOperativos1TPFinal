@@ -35,7 +35,7 @@ int init_sock(int type, int ip, int port, fdtype typedata) {
         return -1;
 
     /* Agregamos a la instancia epoll */
-    if (epoll_add(sock, typedata, EPOLLET | EPOLLONESHOT | EPOLLIN, NULL) == NULL)
+    if (epoll_add(sock, typedata, EPOLLET | EPOLLIN, NULL) == NULL)
         return -1;
 
     return sock;

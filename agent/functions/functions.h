@@ -81,8 +81,8 @@ void send_announce();
     setea 'EPOLLOUT' en 'epollfd' y retorna 1*/
 int send_msg_tcp(int fd, char *msg, int len_msg, FdInfo* info);
 
-/* Anade el string al buffer 'buf_out' de 'info', usando el mutex de 'info'. */
-int add_to_buffer(FdInfo* info, char* src, int len);
+/* Anade el string al buffer 'buf_out' de 'info'. */
+int add_to_buffer(FdInfo* info, char* msg, int len);
 
 /* Inicia el timer (ya creado) con una cantidad en segundos */
 int timerfd_start(int timerfd, int sec);

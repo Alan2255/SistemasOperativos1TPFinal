@@ -2,19 +2,21 @@
 #include "../structures/fdinfo.h"
 #include <pthread.h>
 #include <string.h>
+#include <stdio.h>
 
 
-/* Anade el string al buffer 'buf_out' de 'info', usando el mutex de 'info'. */
-int add_to_buffer(FdInfo* info, char* src, int len) {
-    fd_tcp_data* data = (fd_tcp_data*)info->data;
-    int available = TAM_BUF - data->len_buf_out;
+/* Anade el string al buffer 'buf_out' de 'info'. */
+int add_to_buffer(FdInfo* info, char* msg, int len) {
+    fd_tcp_data* data = info->data;
 
-    pthread_mutex_lock(&data->mutex);
+    if (len < TAM_BUF - data->len_buf_out) {
+        printf("buf_out sin espacio.\n");
+        return -1;
+    }
+    else {
+        memcpy(data->buf_out + data->len_buf_out, msg, len);
+        data->len_buf_out += len;            
+    }
 
-    memcpy(data->buf_out + data->len_buf_out, src, len < available ? len : available);
-    data->len_buf_out += len < available ? len : available;
-
-    pthread_mutex_unlock(&data->mutex);
-    
-    return 1;
+    return 0;
 }
