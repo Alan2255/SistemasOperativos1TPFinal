@@ -15,7 +15,8 @@ generate_jobs(N, ListMaximos) ->
     JobID = integer_to_list(JobID_int),
     ListRecursos = ["cpu", "mem", "gpu"],
 
-    Eleccion_recursos = rand:uniform(3), %random entre 1 y N (inclusive), elije cuantos recursos va a pedir
+    % Eleccion_recursos = rand:uniform(3), %random entre 1 y N (inclusive), elije cuantos recursos va a pedir
+    Eleccion_recursos = 1,
 
     case Eleccion_recursos of
         1 ->
@@ -61,8 +62,7 @@ generate_jobs(N, ListMaximos) ->
 % handler_job es creado sin link ya que si muere o le pasa algo a ese job no nos importa queremos seguir atendiendo los proximos.
 % Recibe : JobTimeout(int), Pid_wait_jobs(Pid), Puerto(int)
 scheduler_jobs(JobTimeout, Pid_wait_jobs, Socket)->
-    {ok, MapNodos} = aux:get_map_nodes(Socket),
-    aux:recibir_jobs_y_armar_peticiones(Socket, MapNodos, JobTimeout, Pid_wait_jobs).
+    aux:recibir_jobs_y_armar_peticiones(Socket, JobTimeout, Pid_wait_jobs).
 
 %Crea y linkea el proceso client
 % Recibe: Modo(atomo), N(int), Puerto(int) 

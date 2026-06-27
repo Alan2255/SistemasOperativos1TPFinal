@@ -1,5 +1,5 @@
 -module(aux).
--export([eliminar_indice/2, inicializar_sistema/2, handler_job/8, wait_jobs/1, recibir_jobs_y_armar_peticiones/4, supervisor_scheduler_jobs/4, conectar_y_obtener_nodos/1, get_map_nodes/1, tcp_deliver/2]).
+-export([eliminar_indice/2, inicializar_sistema/2, handler_job/8, wait_jobs/1, recibir_jobs_y_armar_peticiones/3, supervisor_scheduler_jobs/4, conectar_y_obtener_nodos/1, get_map_nodes/1, tcp_deliver/2]).
 
 %========= Funciones AUXILIARES  ===============$
 %MapNodos : mapa donde key es el nodo y value lista con 3 enteros, donde cada entero representa en orden la cantidad de CPU, MEM, GPU
@@ -273,20 +273,33 @@ procesar_respuesta(JobID, Job, _CantRecursos, Socket, Msg_RELEASE, JobTimeout, P
 
 %Cada vez q recibe un job arma la peticion y crea un proceso (conectado al mismo agente) para q mande y espere la rta del job
 % se llama recursivamente para seguir atendiendo jobs
-recibir_jobs_y_armar_peticiones(Socket, MapNodos, JobTimeout, Pid_wait_jobs) ->
+% Eliminamos MapNodos de los argumentos iniciales
+recibir_jobs_y_armar_peticiones(Socket, JobTimeout, Pid_wait_jobs) ->
     receive
          no_hay_mas_jobs -> 
             ok;
 
-        {JobID, Job, CantRecursos} -> %Job = "recurso:cant:recurso:cant"
-            case armar_peticiones(JobID, Job, CantRecursos, MapNodos) of
-                {error, no_alcanza} -> %Si no pudimos armar las peticiones no alcanzaron los nodos disponibles para la cantidad requerida de algun recurso
-                    Pid_wait_jobs ! {ok, Socket};
+        {JobID, Job, CantRecursos} -> % Entra un nuevo Job
+            
+            % 1. Solicitamos el mapa de nodos actualizado AL MOMENTO para este Job especifico
+            case get_map_nodes(Socket) of
+                {ok, MapNodos} ->
+                    % 2. Intentamos armar las peticiones con la foto actual de la red
+                    case armar_peticiones(JobID, Job, CantRecursos, MapNodos) of
+                        {error, no_alcanza} -> 
+                            Pid_wait_jobs ! {ok, Socket};
 
-                {Msg_REQUEST, Msg_RELEASE} -> %Si pudimos armarlas, las enviamos al agente e insertamos en la lista de pendientes el job                    
-                    spawn(aux, handler_job, [JobID, Job, CantRecursos, JobTimeout,Pid_wait_jobs, Socket, Msg_REQUEST, Msg_RELEASE]) %Recibe el job y crea un proceso q lo maneje,  LE PASAMOS MODULO AUX ESTA AHI LA FUN       
+                        {Msg_REQUEST, Msg_RELEASE} -> 
+                            spawn(aux, handler_job, [JobID, Job, CantRecursos, JobTimeout, Pid_wait_jobs, Socket, Msg_REQUEST, Msg_RELEASE])       
+                    end;
+                
+                {error, timeout_esperando_nodos} ->
+                    io:format("[scheduler] Error: No se pudo obtener el mapa de nodos para el Job ~s~n", [JobID]),
+                    Pid_wait_jobs ! {ok, Socket}
             end,
-    recibir_jobs_y_armar_peticiones(Socket, MapNodos, JobTimeout, Pid_wait_jobs)
+            
+            % 3. Volvemos a iterar para esperar el proximo Job
+            recibir_jobs_y_armar_peticiones(Socket, JobTimeout, Pid_wait_jobs)
     end.  
 
 %manda el msg al agente espera su respuesta y la maneja
@@ -301,29 +314,36 @@ tcp_deliver(Socket, JobTimeout) ->
     case gen_tcp:recv(Socket, 0) of
         {ok, Bin} -> 
             Str = binary_to_list(Bin),
-            % Parseamos el comando para extraer el JobID. 
-            % Ejemplos esperados de C: "JOB_GRANTED 145" o "JOB_DENIED 8"
-            case string:tokens(Str, " ") of
-                [_Comando, JobID | _Resto] ->
-                    % Buscamos el PID del handler_job asignado en la tabla ETS
-                    case ets:lookup(pendientes, JobID) of
-                        [{JobID, _Job, PidHandler}] ->
-                            % Le enviamos el mensaje de forma segura al handler_job que lo espera
-                            PidHandler ! {tcp_msg, Bin};
-                        [] ->
-                            io:format("[tcp_deliver] Alerta: Llego respuesta para JobID ~s pero no hay proceso pendiente.~n", [JobID])
+            case Str of
+                "NODES " ++ _Resto ->
+                    % Alguien pidió los nodos actualizados. 
+                    % Se los enviamos directo al proceso registrado pid_scheduler_job
+                    case whereis(pid_scheduler_job) of
+                        undefined -> 
+                            io:format("[tcp_deliver] Alerta: Llego NODES pero pid_scheduler_job no esta registrado.~n");
+                        PidScheduler -> 
+                            PidScheduler ! {tcp_nodes, Bin}
                     end;
+
                 _ ->
-                    io:format("[tcp_deliver] Error: Estructura de paquete invalida desde el agente: ~p~n", [Str])
+                    % Si no es un mensaje de NODES, asumimos que es un JOB_GRANTED/DENIED
+                    case string:tokens(Str, " ") of
+                        [_Comando, JobID | _Resto] ->
+                            case ets:lookup(pendientes, JobID) of
+                                [{JobID, _Job, PidHandler}] ->
+                                    PidHandler ! {tcp_msg, Bin};
+                                [] ->
+                                    io:format("[tcp_deliver] Alerta: Llego respuesta para JobID ~s sin proceso.~n", [JobID])
+                            end;
+                        _ ->
+                            io:format("[tcp_deliver] Paquete invalido: ~p~n", [Str])
+                    end
             end,
-            % Seguimos escuchando el socket de forma infinita
             tcp_deliver(Socket, JobTimeout);
 
-        {error, closed} ->
-            io:format("[tcp_deliver] Conexion cerrada por el agente.~n");
-        {error, Reason} ->
-            io:format("[tcp_deliver] Error en lectura de Socket: ~p~n", [Reason])
-    end. 
+        {error, closed} -> io:format("[tcp_deliver] Conexion cerrada.~n");
+        {error, Reason} -> io:format("[tcp_deliver] Error: ~p~n", [Reason])
+    end.
 
 
 % Crea el proceso scheduler_jobs, si este muere captura el error y se encarga de volver a levantarlo.
@@ -336,7 +356,9 @@ supervisor_scheduler_jobs(JobTimeout, Pid_wait_jobs, Puerto, Pid_caller) ->
     Pid_caller ! scheduler_listo,
     receive 
         {'EXIT', _From, _Reason} ->
-            unregister(pid_scheduler_job),
+            io:format("[supervisor_scheduler_jobs] Me fui a mi casa chau ~n"),
+            % Si el proceso murio entonces ya no esta regitrado, no hace falta unregister
+            % unregister(pid_scheduler_job),
             supervisor_scheduler_jobs(JobTimeout, Pid_wait_jobs, Puerto, self())
     end.
 
@@ -363,20 +385,23 @@ get_max_resources(Socket) ->
 
 % Devuelve un mapa de nodos
 get_map_nodes(Socket) ->
+    % 1. Solicitamos la informacion al agente C de forma asincrona
     case gen_tcp:send(Socket, <<"GET_NODES">>) of 
         ok -> ok;
-        {error, RazonDeSer} -> exit({error_send_get_map_nodes, RazonDeSer})
+        {error, Reason} -> exit({error_send_get_map_nodes, Reason})
     end,
-    case gen_tcp:recv(Socket, 0) of 
-        {ok, BinList} -> 
+
+    % Espera mensaje de TCP deliver 
+    receive 
+        {tcp_nodes, BinList} -> 
             ListStr = binary_to_list(BinList),
             ListSinPrefijo = remover_prefijo_nodes(ListStr),
             List_nodos_separados = string:split(ListSinPrefijo, ";", all),
             MapNodos = parsear_lista_nodos(List_nodos_separados),
-            {ok, MapNodos};
-
-        {error, Reason} ->
-            exit({error_get_map_nodes, Reason})
+            {ok, MapNodos}
+    after 5000 -> 
+        % Timeout de seguridad por si el agente C se tilda o cae
+        {error, timeout_esperando_nodos}
     end.
 
 % Obtiene la lista de nodos activos, crea tabla de PENDIENTES, crea y LINKEA los procesos scheduler_job y wait_job 
@@ -394,7 +419,7 @@ inicializar_sistema(N, Puerto) ->
     % probablemente terminemos pidiendo recursos full random desconociendo la capacidad total
     ListMaximos = get_max_resources(Socket),
 
-    % Activamos el tcp deliver
+    % Creamos el proceso tcp deliver
     JobTimeout = 10000,
     spawn_link(fun() -> tcp_deliver(Socket, JobTimeout) end),
 
