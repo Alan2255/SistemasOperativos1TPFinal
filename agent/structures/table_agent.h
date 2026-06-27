@@ -56,7 +56,7 @@ void agent_manager_delete(const char *ip, const char *port);
 // Convierte la tabla de agentes en un string con las capacidades de los recursos
 char* agent_manager_get_nodes();
 
-// Busca un agente por el fd de su conexion y copia su IP en ip_out
-int agent_manager_get_ip_by_fd(int fd, char* ip_out);
+// Busca un agente por el fd de su conexion y copia su ip y puerto
+int agent_manager_get_addr_by_fd(int fd, char* ip, char* port);
 
 #endif

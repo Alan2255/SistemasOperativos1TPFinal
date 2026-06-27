@@ -27,11 +27,12 @@ typedef struct {
     int len_buf_in;
     char buf_out[TAM_BUF];
     int len_buf_out;
-    pthread_mutex_t mutex;
+    pthread_mutex_t mutex_in;
+    pthread_mutex_t mutex_out;
 } fd_tcp_data;
 
 typedef struct {
-    char ip[INET_ADDRSTRLEN]; 
+    char ip_port[INET_ADDRSTRLEN + PORTSTRLEN + 2]; 
 } fd_node_timer_data;
 
 

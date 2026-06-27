@@ -145,15 +145,18 @@ void agent_manager_delete(const char *ip, const char *port) {
     hash_remove(table_agent, key);
 }
 
-// Busca un agente por el fd de su conexion y copia su IP en ip_out
-int agent_manager_get_ip_by_fd(int fd, char* ip_out) {
-    if (!table_agent || !ip_out) return -1;
+// Busca un agente por el fd de su conexion y copia su ip y puerto
+int agent_manager_get_addr_by_fd(int fd, char* ip, char* port) {
+    if (!table_agent || !ip || !port) return -1;
 
     for (int i = 0; i < table_agent->used; i++) {
         if (table_agent->entries[i].key == NULL) continue;
         AgentNode *agente = (AgentNode*)table_agent->entries[i].value;
         if (agente->fdinfo != NULL && agente->fdinfo->fd == fd) {
-            strncpy(ip_out, agente->ip, INET_ADDRSTRLEN);
+            strncpy(ip, agente->ip, INET_ADDRSTRLEN - 1);
+            ip[INET_ADDRSTRLEN - 1] = '\0';
+            strncpy(port, agente->port, PORTSTRLEN - 1);
+            port[PORTSTRLEN - 1] = '\0';
             return 0;
         }
     }

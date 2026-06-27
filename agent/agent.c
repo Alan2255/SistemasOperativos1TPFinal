@@ -78,8 +78,7 @@ int main(int argc, char* argv[]) {
     if (timerfd == -1)
         return -1;
 
-    FdInfo* timerfd_info = epoll_add(timerfd, FD_SEND_ANNOUNCE_TIMER, 
-                                    EPOLLIN | EPOLLET | EPOLLONESHOT, NULL);
+    FdInfo* timerfd_info = epoll_add(timerfd, FD_SEND_ANNOUNCE_TIMER, EPOLLIN | EPOLLET, NULL);
     if (timerfd_info == NULL)
         return -1;
     if (timerfd_start(timerfd, ANNOUNCE_SEC) == -1)

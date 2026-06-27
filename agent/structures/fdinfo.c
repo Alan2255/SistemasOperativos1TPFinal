@@ -13,7 +13,9 @@ FdInfo *fd_info_create(int fd, fdtype type) {
 
     if (type == FD_SCHEDULER || type == FD_AGENT) {
         ret->data = malloc(sizeof(fd_tcp_data));
-        pthread_mutex_init(&((fd_tcp_data*)(ret->data))->mutex, NULL);
+        pthread_mutex_init(&((fd_tcp_data*)(ret->data))->mutex_in, NULL);
+        pthread_mutex_init(&((fd_tcp_data*)(ret->data))->mutex_out, NULL);
+
     }
     else if (type == FD_NODE_TIMER)
         ret->data = malloc(sizeof(fd_node_timer_data));
