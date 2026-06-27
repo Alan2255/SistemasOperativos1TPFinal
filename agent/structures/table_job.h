@@ -11,6 +11,7 @@ extern Hash *table_job;
 // Request de un recurso
 typedef struct { 
     char dest_ip[INET_ADDRSTRLEN];
+    char dest_port[PORTSTRLEN];
     char res[MAX_BYTES_NAME_RESOURCE];
     int amount; 
     int granted;
@@ -43,7 +44,7 @@ const job_table_t* job_get(int job_id);
 // Chequea si todos los requisitos del job están concedidos
 int job_check_granted(int job_id);
 
-// Marca el pedido del job correspondiente a 'ip' como 'val'
-bool job_set_granted(int job_id, char* ip, int val);
+// Marca el pedido del job correspondiente al ip y puerto como 'val'
+bool job_set_granted(int job_id, char* ip, char* port, int val);
 
 #endif

@@ -7,6 +7,8 @@
 #include <arpa/inet.h>
 #include "hash.h" 
 
+#define KEY_LEN (INET_ADDRSTRLEN + PORTSTRLEN + 2)
+
 extern Hash *table_agent;
 
 // Agente
@@ -30,29 +32,26 @@ void agent_manager_shutdown(void);
 // Agrega un agente
 void agent_manager_add(char* ip, char* port, int count_resources, Resource* resources, int timerfd);
 
-// Busca un agente por su ip y devuelve un puntero al mismo si existe
-AgentNode* agent_manager_get(char* ip);
+// Busca un agente por su ip y puerto y devuelve un puntero al mismo si existe
+AgentNode* agent_manager_get(char* ip, char* port);
 
-// Busca un agente por su ip y devuelve su socket si existe
-FdInfo* agent_manager_get_fdinfo(char* ip);
+// Busca un agente por su ip y puerto y devuelve su socket si existe
+FdInfo* agent_manager_get_fdinfo(char* ip, char* port);
 
-// Busca un agente por su ip y actualiza su fdinfo
-void agent_manager_set_fdinfo(const char *ip, FdInfo* newFdinfo);
+// Busca un agente por su ip y puerto y actualiza su fdinfo
+void agent_manager_set_fdinfo(const char *ip, const char *port, FdInfo* newFdinfo);
 
-// Busca un agente por su ip y actualiza sus recursos
-void agent_manager_update(char* ip, Resource* resources);
+// Busca un agente por su ip y puerto y actualiza sus recursos
+void agent_manager_update(char* ip, char* port, Resource* resources);
 
-// Busca un agente por su ip y devuelve su timerfd si existe
-int agent_manager_get_timerfd(const char *ip);
+// Busca un agente por su ip y puerto y devuelve su timerfd si existe
+int agent_manager_get_timerfd(const char *ip, const char *port);
 
-// Busca un agente por su ip y actualiza su timerfd
-void agent_manager_set_timerfd(const char *ip, int newTimerfd);
-
-// Busca un agente por su ip y devuelve su puerto si existe
-char* agent_manager_get_port(const char *ip);
+// Busca un agente por su ip y puerto y actualiza su timerfd
+void agent_manager_set_timerfd(const char *ip, const char *port, int newTimerfd);
 
 // Elimina un agente
-void agent_manager_delete(const char *ip);
+void agent_manager_delete(const char *ip, const char *port);
 
 // Convierte la tabla de agentes en un string con las capacidades de los recursos
 char* agent_manager_get_nodes();
