@@ -108,21 +108,29 @@ int send_msg(FdInfo* info, char* msg, int len) {
     fd_tcp_data* data = info->data;
 
     pthread_mutex_lock(&data->mutex_out);
+    
+    // Si ya hay cosas encoladas, mantenemos el orden FIFO metiendo lo nuevo atrás
     if (data->len_buf_out > 0) {
         add_to_buffer(info, msg, len);
     }
     else {
         int n = send(info->fd, msg, len, MSG_NOSIGNAL);
+        
         if (n == -1) {
-            if (errno == EPIPE) {
-                ;
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // El socket está temporalmente lleno. Encolamos TODO el mensaje
+                add_to_buffer(info, msg, len);
+                epoll_add(info->fd, info->type, 
+                          EPOLLOUT | EPOLLIN | EPOLLET, info);
             }
             else {
+                // Errores reales (EPIPE, ECONNRESET, etc.)
                 pthread_mutex_unlock(&data->mutex_out);
-                return -1;
+                return -1; // Retornamos error real
             }
         }
         else if (n < len) {
+            // Envío parcial: encolamos lo que faltó mandar
             add_to_buffer(info, msg + n, len - n);
             epoll_add(info->fd, info->type, 
                         EPOLLOUT | EPOLLIN | EPOLLET, info);
@@ -130,7 +138,7 @@ int send_msg(FdInfo* info, char* msg, int len) {
     }
     pthread_mutex_unlock(&data->mutex_out);
 
-    return 0;
+    return 0; // Éxito (o el mensaje ya quedó encolado de forma segura)
 }
 
 /* Maneja la recepcion de un mensaje de un agente */
@@ -164,7 +172,7 @@ void handle_agent_msg(FdInfo* info) {
 
         data->len_buf_in += n;
         data->buf_in[data->len_buf_in] = '\0';
-        printf("Buffer crudo recibido: [%s]\n", data->buf_in);
+        // printf("Buffer crudo recibido: [%s]\n", data->buf_in);
 
         // --- SOLUCIÓN DEPROCESAMIENTO PORLÍNEAS SEGURO ---
         char* read_ptr = data->buf_in;
@@ -188,13 +196,11 @@ void handle_agent_msg(FdInfo* info) {
 
             if (parse_node_command(read_ptr, command_name, &job_id, res, &amount) != -1) {
                 
-                // --- LÓGICA DE NEGOCIO (IGUAL A LA TUYA) ---
+                printf("[handle_agent_msg] %s\n", command_name);
                 char reply[TAM_BUF];
                 int len;
-                printf("COMMAND_NAME HANDLER [%s]\n",command_name);
-                printf("RESOURCE HANDLER [%s]\n",res);
                 if (strcmp(command_name, "RESERVE") == 0) {
-                    printf("Procesando RESERVE para Job %d\n", job_id);
+                    // printf("Procesando RESERVE para Job %d\n", job_id);
                     switch (local_resources_reserve(job_id, info->fd, res, amount)) {
                         case -1:
                             len = sprintf(reply, "DENIED %d\n", job_id);
@@ -215,8 +221,9 @@ void handle_agent_msg(FdInfo* info) {
                     char port[PORTSTRLEN];
                     agent_manager_get_addr_by_fd(info->fd, ip, port);
                     job_set_granted(job_id, ip, port, 1);
-
-                    if (job_check_granted(job_id)) { 
+                    
+                    int job_is_granted = job_check_granted(job_id);
+                    if (job_is_granted) { 
                         len = sprintf(reply, "JOB_GRANTED %d", job_id);
                         unsigned short nlen = htons(len);
                         send_msg(scheduler_info, (char*)&nlen, NBYTES_PACKET_ERL);
@@ -249,7 +256,7 @@ void handle_agent_msg(FdInfo* info) {
             // Si procesamos todo hasta el final (terminó en \n), RESETEAMOS A 0
             data->len_buf_in = 0;
             data->buf_in[0] = '\0';
-            printf("Buffer completamente procesado y reseteado a 0.\n");
+            // printf("Buffer completamente procesado y reseteado a 0.\n");
         } else if (bytes_procesados > 0) {
             // Si quedó un mensaje a la mitad (no alcanzó a tener \n), nos traemos solo ese pedazo al inicio
             memmove(data->buf_in, read_ptr, data->len_buf_in - bytes_procesados);
@@ -293,7 +300,7 @@ void handle_announce(FdInfo* info) {
     char buf[TAM_BUF];
     int len_buf;
     
-    printf("Evento de agente.\n");
+    // printf("Evento de agente.\n");
 
     char ip[INET_ADDRSTRLEN];
     struct sockaddr_in src;
@@ -318,13 +325,13 @@ void handle_announce(FdInfo* info) {
         if (parse_announce(buf, port, resources, &res_count) == -1)
             return;
     
-        printf("ip: %s, ", ip);
-        printf("puerto: %s, agent_table->timerfd=",port);
+        // printf("ip: %s, ", ip);
+        // printf("puerto: %s, agent_table->timerfd=",port);
 
         /* Agregamos o actualizamos el nodo en la tabla */
         int timerfd = agent_manager_get_timerfd(ip, port);
 
-        printf("%d.\n", timerfd);
+        // printf("%d.\n", timerfd);
 
         if (timerfd < 0) { // Si el nodo no se encuentra en la tabla
             // Creamos el timer
@@ -360,7 +367,7 @@ int handle_scheduler(FdInfo *info) {
                      TAM_BUF - data->len_buf_in);
         
         if (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-            printf("ernno EAGAIN.\n");
+            // printf("ernno EAGAIN.\n");
             break;
         }
 
@@ -382,26 +389,31 @@ int handle_scheduler(FdInfo *info) {
         while (1) {
             /* Verificamos si llegaron los bytes de la longitud */
             if (data->len_buf_in < NBYTES_PACKET_ERL) {
-                printf("salimos del while mas interno.\n");
+                // printf("salimos del while mas interno.\n");
                 break;
             }
             uint16_t len_msg;
             memcpy(&len_msg, data->buf_in, NBYTES_PACKET_ERL);
             len_msg = ntohs(len_msg);
-            printf("len_msg=%u, buf+2=%s.\n", len_msg, data->buf_in+NBYTES_PACKET_ERL);
+            // printf("len_msg=%u, buf+2=%s.\n", len_msg, data->buf_in+NBYTES_PACKET_ERL);
 
             /* Verificamos si llego el mensaje completo */
             if (data->len_buf_in < NBYTES_PACKET_ERL + len_msg)
                 break;
     
-            // DESDE ACA TENEMOS EL PEDIDO COMPLETO----------------------------------------------------
-            // Comando completo en data->buf_in[2, len_msg]
+            // Clonamos el mensaje en un buffer temporal
+            char working_buf[TAM_BUF];
+            memcpy(working_buf, data->buf_in + NBYTES_PACKET_ERL, len_msg);
+            working_buf[len_msg] = '\0'; // Nos aseguramos el fin de cadena string en C
 
-            /* Parseamos el pedido y lo gestionamos */
+            /* Parseamos el pedido y lo gestionamos sobre la copia aislada */
             char *space = " ", *colon=":";
             char *saveptr1, *saveptr2;
             char *job_id;
-            char *command = strtok_r(data->buf_in + NBYTES_PACKET_ERL, space, &saveptr1);
+            
+            char *command = strtok_r(working_buf, space, &saveptr1);
+
+            printf("[handle_scheduler] %s\n",command);
         
             // Buffers para contestar
             char request[TAM_BUF];
@@ -412,7 +424,7 @@ int handle_scheduler(FdInfo *info) {
             int agent_sock;
             FdInfo* agent_fdinfo;
 
-            if (strncmp(command, "JOB_REQUEST", strlen("JOB_REQUEST")) == 0) {
+            if (command != NULL && strncmp(command, "JOB_REQUEST", strlen("JOB_REQUEST")) == 0) {
                 // JOB_REQUEST [ ip:port:res:amount ... ]
                 job_id = strtok_r(NULL, space, &saveptr1);
 
@@ -432,7 +444,7 @@ int handle_scheduler(FdInfo *info) {
                     char *amount = strtok_r(NULL, colon, &saveptr2);                    
         
                     // Verificamos si el agente (ip:port) esta en la tabla de nodos
-                    if (agent_manager_get(ip, port) == NULL) { // No se encuentra => no se puede mandar "RESERVE ..."
+                    if (agent_manager_get(ip, port) == NULL) { 
                         printf("No se encuentra el agente %s:%s.\n", ip, port);
                         
                         // Le avisamos al scheduler
@@ -445,12 +457,11 @@ int handle_scheduler(FdInfo *info) {
                         nreqs = 0;
                         break;
                     }
-                    else { // Se encuentra
+                    else { 
                         printf("Si se encuentra el agente %s:%s.\n", ip, port);
                         agent_fdinfo = agent_manager_get_fdinfo(ip, port);
 
-                        if (agent_fdinfo == NULL) { // Pero no se establecio conexion
-                            // Creamos el socket y nos conectamos al agente
+                        if (agent_fdinfo == NULL) { 
                             agent_sock = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK ,0);
 
                             struct sockaddr_in addr;
@@ -462,18 +473,14 @@ int handle_scheduler(FdInfo *info) {
                             agent_fdinfo = epoll_add(agent_sock, FD_AGENT, 
                                                     EPOLLIN | EPOLLET, NULL);
                             
-                            // Seteamos la entrada fdinfo en la tabla para proximos pedidos
                             agent_manager_set_fdinfo(ip, port, agent_fdinfo);
                         }
         
-                        // Establecida la conexion mandamos el pedido
                         agent_sock = agent_fdinfo->fd;
                         len = sprintf(request, "RESERVE %s %s %s\n", job_id, res, amount);
                         send_msg(agent_fdinfo, request, len);
-                        printf("%s.\n", request);
+                        // printf("%s.\n", request);
 
-
-                        // Guardamos el pedido para agregarlo a la tabla de jobs
                         strncpy(reqs[nreqs].dest_ip, ip, INET_ADDRSTRLEN - 1);
                         reqs[nreqs].dest_ip[INET_ADDRSTRLEN - 1] = '\0';
                         strncpy(reqs[nreqs].res, res, MAX_BYTES_NAME_RESOURCE - 1);
@@ -486,15 +493,12 @@ int handle_scheduler(FdInfo *info) {
                     job_add(atoi(job_id), nreqs, reqs);
                 }
             }
-        
-            // JOB_RELEASE <job_id>
-            else if (strncmp(command, "JOB_RELEASE", strlen("JOB_RELEASE")) == 0) {
+            else if (command != NULL && strncmp(command, "JOB_RELEASE", strlen("JOB_RELEASE")) == 0) {
                 job_id = strtok_r(NULL, space, &saveptr1);
                 
                 printf("Procesando JOB_RELEASE %s.\n", job_id);
                 const job_table_t* job = job_get(atoi(job_id));
         
-                // Mandamos los "RELEASE" a los ip que pedimos recursos.
                 for (int i = 0; i < job->nreqs; i++) {
                     job_req_t req = job->reqs[i];
                     len = sprintf(request, "RELEASE %s %s %d\n",
@@ -504,40 +508,35 @@ int handle_scheduler(FdInfo *info) {
                         send_msg(agent_fdinfo, request, len);
                 }
         
-                // Eliminamos el job de la tabla
                 job_release(atoi(job_id));
             }
-            else if (strncmp(command, "GET_NODES", strlen("GET_NODES")) == 0) {
-                // ----------------------------------------------------------------------------------------------------
-                printf("get_nodes.");
-                // ----------------------------------------------------------------------------------------------------
+            else if (command != NULL && strncmp(command, "GET_NODES", strlen("GET_NODES")) == 0) {
+                // printf("get_nodes.");
                                 
                 char *buf = agent_manager_get_nodes();
                 len = sprintf(reply, "%s", buf);
 
-                // ----------------------------------------------------------------------------------------------------
-                printf("len=%d, reply=%s.\n", len, reply);
-                // ----------------------------------------------------------------------------------------------------
+                // printf("len=%d, reply=%s.\n", len, reply);
 
                 nlen = htons(len);
                 send_msg(scheduler_info, (char*)&nlen, NBYTES_PACKET_ERL);
-                
                 send_msg(scheduler_info, reply, len);
 
-                // ----------------------------------------------------------------------------------------------------
-                printf("tabla mandada.\n");
-                // ----------------------------------------------------------------------------------------------------
+                // printf("tabla mandada.\n");
             }
-            else 
+            else {
                 return -1;
+            }
 
             /* Actualizamos el buffer */
+            int bytes_procesados = NBYTES_PACKET_ERL + len_msg;
             memmove(data->buf_in, 
-                    data->buf_in + NBYTES_PACKET_ERL + len_msg, 
-                    data->len_buf_in - (NBYTES_PACKET_ERL + len_msg));
-            data->len_buf_in -= NBYTES_PACKET_ERL + len_msg;
+                    data->buf_in + bytes_procesados, 
+                    data->len_buf_in - bytes_procesados);
+            data->len_buf_in -= bytes_procesados;
             (data->buf_in)[data->len_buf_in] = '\0';
-            printf("len=%d, buf=%s.\n", data->len_buf_in, data->buf_in);
+            
+            // printf("len residual=%d, buf actual=%s.\n", data->len_buf_in, data->buf_in);
         }
     }
     return 0;
