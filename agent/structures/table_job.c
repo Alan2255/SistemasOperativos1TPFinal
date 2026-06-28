@@ -93,6 +93,39 @@ int job_check_granted(int job_id) {
     return 1;
 }
 
+// Devuelve un string con la tabla de jobs para imprimir.
+char* job_table_to_string() {
+    if (!table_job) return NULL;
+
+    size_t buf_tam =  40 + MAX_JOBS * (40 + MAX_JOB_RQ * 90);
+    char *buf = malloc(buf_tam);
+
+    int written = 0;
+    written += snprintf(buf + written, buf_tam - written, "{{{{{{{{{{{{{ job_table }}}}}}}}}}}}}\n");
+
+    for (int i = 0; i < table_job->used; i++) {
+        if (table_job->entries[i].value == NULL) continue;
+
+        const job_table_t *job = (const job_table_t*)table_job->entries[i].value;
+        written += snprintf(buf + written, buf_tam - written,
+                           "{job_id %d: ", job->job_id);
+
+        const job_req_t *r = &job->reqs[0];
+        written += snprintf(buf + written, buf_tam - written,
+                            "%s:%s res=%s amount=%d granted=%d",
+                            r->dest_ip, r->dest_port, r->res, r->amount, r->granted);
+        for (int j = 1; j < job->nreqs; j++) {
+            r = &job->reqs[j];
+            written += snprintf(buf + written, buf_tam - written,
+                               ", %s:%s res=%s amount=%d granted=%d",
+                               r->dest_ip, r->dest_port, r->res, r->amount, r->granted);
+        }
+        written += snprintf(buf + written, buf_tam - written, "}\n");
+    }
+
+    return buf;
+}
+
 // Marca el pedido del job correspondiente a 'ip' como 'val'
 bool job_set_granted(int job_id, char* ip, char* port, int val) {
     job_table_t* job = (job_table_t*)job_get(job_id);

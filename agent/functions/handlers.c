@@ -61,7 +61,7 @@ void handle_announce_timer(FdInfo* info) {
     /* Mandamos el anuncio */
     send_announce();
 
-    /* Iniciamos el time */
+    /* Iniciamos el timer */
     timerfd_start(info->fd, ANNOUNCE_SEC);
 }
 
@@ -201,6 +201,8 @@ void handle_agent_msg(FdInfo* info) {
                 int len;
                 if (strcmp(command_name, "RESERVE") == 0) {
                     // printf("Procesando RESERVE para Job %d\n", job_id);
+                    printf("[handle_agent_msg] procesando 'RESERVE %d'\n", job_id);
+
                     switch (local_resources_reserve(job_id, info->fd, res, amount)) {
                         case -1:
                             len = sprintf(reply, "DENIED %d\n", job_id);
@@ -217,13 +219,27 @@ void handle_agent_msg(FdInfo* info) {
                     }
                 }
                 else if (strcmp(command_name, "GRANTED") == 0) {
+                    printf("[handle_agent_msg] procesando 'GRANTED %d'\n", job_id);
+
                     char ip[INET_ADDRSTRLEN];
                     char port[PORTSTRLEN];
                     agent_manager_get_addr_by_fd(info->fd, ip, port);
                     job_set_granted(job_id, ip, port, 1);
-                    
+
+                    printf("[handle_agent_msg] buscamos job_id=%d en la job_table y obtenemos: ", job_id);
+                    const job_table_t * entry = job_get(job_id);
+                    if (entry != NULL) {
+                        printf("'%s:%s:%s:%d granted=%d'", entry->reqs[0].dest_ip, entry->reqs[0].dest_port, entry->reqs[0].res, entry->reqs[0].amount, entry->reqs[0].granted);
+                        for (int i = 1; i < entry->nreqs; i++) {
+                        printf(", '%s:%s:%s:%d granted=%d'", entry->reqs[0].dest_ip, entry->reqs[0].dest_port, entry->reqs[0].res, entry->reqs[0].amount, entry->reqs[0].granted);
+                        }
+                    }
+                    printf(".\n");
+
                     int job_is_granted = job_check_granted(job_id);
                     if (job_is_granted) { 
+                        printf("[handle_agent_msg] mandando JOB_GRANTED %d al scheduler.\n", job_id);
+
                         len = sprintf(reply, "JOB_GRANTED %d", job_id);
                         unsigned short nlen = htons(len);
                         send_msg(scheduler_info, (char*)&nlen, NBYTES_PACKET_ERL);
@@ -428,8 +444,12 @@ int handle_scheduler(FdInfo *info) {
                 // JOB_REQUEST [ ip:port:res:amount ... ]
                 job_id = strtok_r(NULL, space, &saveptr1);
 
-                printf("Procesando JOB_REQUEST %s.\n", job_id);
-        
+                printf("[handle_scheduler] job_table before JOB_REQUEST %s:\n", job_id);
+                char *job_table_str = job_table_to_string();
+                printf("%s\n", job_table_str);
+                free(job_table_str);
+
+
                 job_req_t reqs[MAX_JOB_RQ];
                 int nreqs = 0;
 
@@ -458,7 +478,6 @@ int handle_scheduler(FdInfo *info) {
                         break;
                     }
                     else { 
-                        printf("Si se encuentra el agente %s:%s.\n", ip, port);
                         agent_fdinfo = agent_manager_get_fdinfo(ip, port);
 
                         if (agent_fdinfo == NULL) { 
@@ -483,6 +502,8 @@ int handle_scheduler(FdInfo *info) {
 
                         strncpy(reqs[nreqs].dest_ip, ip, INET_ADDRSTRLEN - 1);
                         reqs[nreqs].dest_ip[INET_ADDRSTRLEN - 1] = '\0';
+                        strncpy(reqs[nreqs].dest_port, port, PORTSTRLEN - 1);
+                        reqs[nreqs].dest_port[PORTSTRLEN - 1] = '\0';
                         strncpy(reqs[nreqs].res, res, MAX_BYTES_NAME_RESOURCE - 1);
                         reqs[nreqs].res[MAX_BYTES_NAME_RESOURCE - 1] = '\0';
                         reqs[nreqs].amount = atoi(amount);
@@ -492,13 +513,24 @@ int handle_scheduler(FdInfo *info) {
                 if (nreqs != 0) {
                     job_add(atoi(job_id), nreqs, reqs);
                 }
+
+                printf("[handle_scheduler] job_table after JOB_REQUEST %s:\n", job_id);
+                job_table_str = job_table_to_string();
+                printf("%s\n", job_table_str);
+                free(job_table_str);
             }
             else if (command != NULL && strncmp(command, "JOB_RELEASE", strlen("JOB_RELEASE")) == 0) {
                 job_id = strtok_r(NULL, space, &saveptr1);
-                
-                printf("Procesando JOB_RELEASE %s.\n", job_id);
+                printf("[handle_scheduler] Procesando JOB_RELEASE %s.\n", job_id);
+
                 const job_table_t* job = job_get(atoi(job_id));
-        
+
+                printf("[handle_scheduler] job_table before JOB_RELEASE %s\n", job_id);
+                char *job_table_str = job_table_to_string();
+                printf("%s\n", job_table_str);
+                free(job_table_str);
+
+                // Mandamos "RELEASE ..." a cada agente que le mandamos "RESERVE ..."
                 for (int i = 0; i < job->nreqs; i++) {
                     job_req_t req = job->reqs[i];
                     len = sprintf(request, "RELEASE %s %s %d\n",
@@ -507,8 +539,15 @@ int handle_scheduler(FdInfo *info) {
                     if (agent_fdinfo != NULL) 
                         send_msg(agent_fdinfo, request, len);
                 }
-        
+
+                // Eliminamos el job de la tabla
                 job_release(atoi(job_id));
+
+                printf("[handle_scheduler] job_table after JOB_RELEASE %s\n", job_id);
+                job_table_str = job_table_to_string();
+                printf("%s\n", job_table_str);
+                free(job_table_str);
+
             }
             else if (command != NULL && strncmp(command, "GET_NODES", strlen("GET_NODES")) == 0) {
                 // printf("get_nodes.");
@@ -522,7 +561,7 @@ int handle_scheduler(FdInfo *info) {
                 send_msg(scheduler_info, (char*)&nlen, NBYTES_PACKET_ERL);
                 send_msg(scheduler_info, reply, len);
 
-                // printf("tabla mandada.\n");
+                printf("[handle_scheduler] tabla mandada.\n");
             }
             else {
                 return -1;
