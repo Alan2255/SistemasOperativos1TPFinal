@@ -444,10 +444,11 @@ int handle_scheduler(FdInfo *info) {
                 // JOB_REQUEST [ ip:port:res:amount ... ]
                 job_id = strtok_r(NULL, space, &saveptr1);
 
-                printf("[handle_scheduler] job_table before JOB_REQUEST %s:\n", job_id);
-                char *job_table_str = job_table_to_string();
-                printf("%s\n", job_table_str);
-                free(job_table_str);
+                // printf("[handle_scheduler] job_table before JOB_REQUEST %s:\n", job_id);
+                // char *job_table_str = job_table_to_string();
+                // printf("%s\n", job_table_str);
+                // if (job_table_str != NULL) free(job_table_str);
+
 
 
                 job_req_t reqs[MAX_JOB_RQ];
@@ -514,10 +515,11 @@ int handle_scheduler(FdInfo *info) {
                     job_add(atoi(job_id), nreqs, reqs);
                 }
 
-                printf("[handle_scheduler] job_table after JOB_REQUEST %s:\n", job_id);
-                job_table_str = job_table_to_string();
-                printf("%s\n", job_table_str);
-                free(job_table_str);
+                // printf("[handle_scheduler] job_table after JOB_REQUEST %s:\n", job_id);
+                // job_table_str = job_table_to_string();
+                // printf("%s\n", job_table_str);
+                // if (job_table_str != NULL) free(job_table_str);
+
             }
             else if (command != NULL && strncmp(command, "JOB_RELEASE", strlen("JOB_RELEASE")) == 0) {
                 job_id = strtok_r(NULL, space, &saveptr1);
@@ -525,10 +527,11 @@ int handle_scheduler(FdInfo *info) {
 
                 const job_table_t* job = job_get(atoi(job_id));
 
-                printf("[handle_scheduler] job_table before JOB_RELEASE %s\n", job_id);
-                char *job_table_str = job_table_to_string();
-                printf("%s\n", job_table_str);
-                free(job_table_str);
+                // printf("[handle_scheduler] job_table before JOB_RELEASE %s\n", job_id);
+                // char *job_table_str = job_table_to_string();
+                // printf("%s\n", job_table_str);
+                // if (job_table_str != NULL) free(job_table_str);
+
 
                 // Mandamos "RELEASE ..." a cada agente que le mandamos "RESERVE ..."
                 for (int i = 0; i < job->nreqs; i++) {
@@ -543,10 +546,10 @@ int handle_scheduler(FdInfo *info) {
                 // Eliminamos el job de la tabla
                 job_release(atoi(job_id));
 
-                printf("[handle_scheduler] job_table after JOB_RELEASE %s\n", job_id);
-                job_table_str = job_table_to_string();
-                printf("%s\n", job_table_str);
-                free(job_table_str);
+                // printf("[handle_scheduler] job_table after JOB_RELEASE %s\n", job_id);
+                // job_table_str = job_table_to_string();
+                // printf("%s\n", job_table_str);
+                // if (job_table_str != NULL) free(job_table_str);
 
             }
             else if (command != NULL && strncmp(command, "GET_NODES", strlen("GET_NODES")) == 0) {

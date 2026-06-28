@@ -99,6 +99,8 @@ char* job_table_to_string() {
 
     size_t buf_tam =  40 + MAX_JOBS * (40 + MAX_JOB_RQ * 90);
     char *buf = malloc(buf_tam);
+    if (!buf) return NULL;
+
 
     int written = 0;
     written += snprintf(buf + written, buf_tam - written, "{{{{{{{{{{{{{ job_table }}}}}}}}}}}}}\n");
