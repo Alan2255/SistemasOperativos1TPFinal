@@ -34,8 +34,6 @@ void agent_manager_shutdown() {
 void agent_manager_add(char* ip, char* port, int count_resources, Resource* resources, int timerfd) {
     if (!table_agent) return;
 
-    printf("nuevo agente: %s:%s\n",ip,port);
-
     AgentNode *nuevo_nodo = malloc(sizeof(AgentNode));
     if (!nuevo_nodo) return; 
     

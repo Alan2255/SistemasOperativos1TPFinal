@@ -196,7 +196,6 @@ void handle_agent_msg(FdInfo* info) {
 
             if (parse_node_command(read_ptr, command_name, &job_id, res, &amount) != -1) {
                 
-                printf("[handle_agent_msg] %s\n", command_name);
                 char reply[TAM_BUF];
                 int len;
                 if (strcmp(command_name, "RESERVE") == 0) {
@@ -225,16 +224,6 @@ void handle_agent_msg(FdInfo* info) {
                     char port[PORTSTRLEN];
                     agent_manager_get_addr_by_fd(info->fd, ip, port);
                     job_set_granted(job_id, ip, port, 1);
-
-                    printf("[handle_agent_msg] buscamos job_id=%d en la job_table y obtenemos: ", job_id);
-                    const job_table_t * entry = job_get(job_id);
-                    if (entry != NULL) {
-                        printf("'%s:%s:%s:%d granted=%d'", entry->reqs[0].dest_ip, entry->reqs[0].dest_port, entry->reqs[0].res, entry->reqs[0].amount, entry->reqs[0].granted);
-                        for (int i = 1; i < entry->nreqs; i++) {
-                        printf(", '%s:%s:%s:%d granted=%d'", entry->reqs[0].dest_ip, entry->reqs[0].dest_port, entry->reqs[0].res, entry->reqs[0].amount, entry->reqs[0].granted);
-                        }
-                    }
-                    printf(".\n");
 
                     int job_is_granted = job_check_granted(job_id);
                     if (job_is_granted) { 
@@ -330,10 +319,10 @@ void handle_announce(FdInfo* info) {
             break;
         if (len_buf == -1)
             return;
+        buf[len_buf] = '\0';
 
         /* Obtenemos la ip */
         inet_ntop(AF_INET, &src.sin_addr, ip, sizeof(ip));
-    
         /* Parseamos el mensaje*/
         char port[PORTSTRLEN];
         Resource resources[MAX_RESOURCES_AGENT];
@@ -361,7 +350,14 @@ void handle_announce(FdInfo* info) {
             char *ip_port = ((fd_node_timer_data *)(timer_info->data))->ip_port;
             snprintf(ip_port, INET_ADDRSTRLEN+PORTSTRLEN+2, "%s:%s", ip, port);
 
-            printf("handle_announce: timer_info->ipPort=%s.\n", ((fd_node_timer_data *)(timer_info->data))->ip_port);
+            printf("handle_announce: nuevo agente %s res_count=%d ", 
+                ((fd_node_timer_data *)(timer_info->data))->ip_port, res_count);
+
+            printf("%s:%d", resources[0].name, resources[0].available);
+            for (int i = 1; i < res_count; i++) {
+                printf(", %s:%d", resources[i].name, resources[i].available);
+            }
+            printf(".\n");
         }
         else {
             agent_manager_update(ip, port, resources);
@@ -395,7 +391,7 @@ int handle_scheduler(FdInfo *info) {
             reservation_manager_release_by_socket(info->fd);
             close(info->fd);
             fd_info_destr(info);
-            printf("handle_scheduler: scheduler closed connection.\n");
+            printf("[handle_scheduler] scheduler closed connection.\n");
             return -1;
         }
  
@@ -428,8 +424,6 @@ int handle_scheduler(FdInfo *info) {
             char *job_id;
             
             char *command = strtok_r(working_buf, space, &saveptr1);
-
-            printf("[handle_scheduler] %s\n",command);
         
             // Buffers para contestar
             char request[TAM_BUF];
@@ -454,6 +448,8 @@ int handle_scheduler(FdInfo *info) {
                 job_req_t reqs[MAX_JOB_RQ];
                 int nreqs = 0;
 
+                printf("[handle_scheduler] procesando JOB_REQUEST %s", job_id);
+
                 for (char *token = strtok_r(NULL, space, &saveptr1);
                     token != NULL && nreqs < MAX_JOB_RQ;
                     token = strtok_r(NULL, space, &saveptr1), nreqs++) {
@@ -464,6 +460,8 @@ int handle_scheduler(FdInfo *info) {
                     char *res = strtok_r(NULL, colon, &saveptr2);
                     char *amount = strtok_r(NULL, colon, &saveptr2);                    
         
+                    printf(" %s:%s:%s:%s", ip, port, res, amount);
+
                     // Verificamos si el agente (ip:port) esta en la tabla de nodos
                     if (agent_manager_get(ip, port) == NULL) { 
                         printf("No se encuentra el agente %s:%s.\n", ip, port);
@@ -511,6 +509,7 @@ int handle_scheduler(FdInfo *info) {
                         reqs[nreqs].granted = 0;
                     }
                 }
+                printf(".\n");
                 if (nreqs != 0) {
                     job_add(atoi(job_id), nreqs, reqs);
                 }
@@ -553,7 +552,7 @@ int handle_scheduler(FdInfo *info) {
 
             }
             else if (command != NULL && strncmp(command, "GET_NODES", strlen("GET_NODES")) == 0) {
-                // printf("get_nodes.");
+                printf("[handle_scheduler] GET_NODES.\n");
                                 
                 char *buf = agent_manager_get_nodes();
                 len = sprintf(reply, "%s", buf);
@@ -564,7 +563,8 @@ int handle_scheduler(FdInfo *info) {
                 send_msg(scheduler_info, (char*)&nlen, NBYTES_PACKET_ERL);
                 send_msg(scheduler_info, reply, len);
 
-                printf("[handle_scheduler] tabla mandada.\n");
+                printf("[handle_scheduler] tabla mandada (%s).\n", buf);
+                free(buf);
             }
             else {
                 return -1;

@@ -183,10 +183,16 @@ void local_resources_to_str(char* buff) {
     }
 
     char* ptr = buff;
-    for (int i = 0; i < resource_count; i++) {
+    pthread_mutex_lock(&resources[0].mutex);
+    int written = sprintf(ptr, "%s:%d", resources[0].name, resources[0].available);
+    pthread_mutex_unlock(&resources[0].mutex);
+    ptr += written;
+
+    for (int i = 1; i < resource_count; i++) {
         pthread_mutex_lock(&resources[i].mutex);
-        int written = sprintf(ptr, "%s:%d ", resources[i].name, resources[i].total_capacity);
+        written = sprintf(ptr, " %s:%d", resources[i].name, resources[i].available);
         pthread_mutex_unlock(&resources[i].mutex);
         ptr += written;
     }
+    *ptr = '\0';
 }
