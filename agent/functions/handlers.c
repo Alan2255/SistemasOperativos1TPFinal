@@ -227,23 +227,28 @@ void handle_agent_msg(FdInfo* info) {
 
                     int job_is_granted = job_check_granted(job_id);
                     if (job_is_granted) { 
-                        printf("[handle_agent_msg] mandando JOB_GRANTED %d al scheduler.\n", job_id);
+                        printf("[handle_agent_msg] mandando ");
 
-                        len = sprintf(reply, "JOB_GRANTED %d", job_id);
+                        len = sprintf(reply + NBYTES_PACKET_ERL, "JOB_GRANTED %d", job_id);
                         unsigned short nlen = htons(len);
-                        send_msg(scheduler_info, (char*)&nlen, NBYTES_PACKET_ERL);
-                        send_msg(scheduler_info, reply, len);
+                        memcpy(reply, (char*)&nlen, NBYTES_PACKET_ERL);
+                        send_msg(scheduler_info, reply, NBYTES_PACKET_ERL+len);
+
+                        printf("len = 0x%x, %s.\n", *((unsigned char*)reply+1), reply+2);
                     }
                 }
                 else if (strcmp(command_name, "RELEASE") == 0) {
+                    printf("[handle_agent_msg] procesando 'RELEASE %d %s %d'\n", job_id, res, amount);
                     local_resources_release(job_id, info->fd, res, amount);
                     reservation_manager_release(job_id);
                 }
                 else if (strcmp(command_name, "DENIED") == 0) {
-                    len = sprintf(reply, "JOB_DENIED %d", job_id);
-                    unsigned short nlen = htons(len);
-                    send_msg(scheduler_info, (char*)&nlen, NBYTES_PACKET_ERL);
-                    send_msg(scheduler_info, reply, len);
+                    len = sprintf(reply + NBYTES_PACKET_ERL, "JOB_DENIED %d", job_id);
+                    len = htons(len);
+                    memcpy(reply, (char*)&len, NBYTES_PACKET_ERL);
+
+                    send_msg(scheduler_info, reply, NBYTES_PACKET_ERL + len);
+
                     job_release(job_id);
                 }
             } else {
@@ -267,7 +272,7 @@ void handle_agent_msg(FdInfo* info) {
             memmove(data->buf_in, read_ptr, data->len_buf_in - bytes_procesados);
             data->len_buf_in -= bytes_procesados;
             data->buf_in[data->len_buf_in] = '\0';
-            printf("Mensaje incompleto remanente. Nuevo len_buf_in = %d\n", data->len_buf_in);
+            printf("Mensaje incompleto remanente. Nuevo len_buf_in = %d, buf_in=%s.\n", data->len_buf_in, data->buf_in);
         }
     }
     
@@ -373,6 +378,8 @@ int handle_scheduler(FdInfo *info) {
 
     fd_tcp_data* data = (fd_tcp_data*)(info->data);
 
+    pthread_mutex_lock(&data->mutex_in);
+
     while (1) {
         int n = read(info->fd, 
                      data->buf_in + data->len_buf_in,
@@ -448,7 +455,7 @@ int handle_scheduler(FdInfo *info) {
                 job_req_t reqs[MAX_JOB_RQ];
                 int nreqs = 0;
 
-                printf("[handle_scheduler] procesando JOB_REQUEST %s", job_id);
+                printf("[handle_scheduler] procesando JOB_REQUEST %s.\n", job_id);
 
                 for (char *token = strtok_r(NULL, space, &saveptr1);
                     token != NULL && nreqs < MAX_JOB_RQ;
@@ -460,18 +467,17 @@ int handle_scheduler(FdInfo *info) {
                     char *res = strtok_r(NULL, colon, &saveptr2);
                     char *amount = strtok_r(NULL, colon, &saveptr2);                    
         
-                    printf(" %s:%s:%s:%s", ip, port, res, amount);
 
                     // Verificamos si el agente (ip:port) esta en la tabla de nodos
                     if (agent_manager_get(ip, port) == NULL) { 
                         printf("No se encuentra el agente %s:%s.\n", ip, port);
                         
                         // Le avisamos al scheduler
-                        len = sprintf(reply, "JOB_DENIED %s", job_id);
+                        len = sprintf(reply + NBYTES_PACKET_ERL, "JOB_DENIED %s", job_id);
                         nlen = htons(len);
+                        memcpy(reply, (char*)&nlen, NBYTES_PACKET_ERL);
 
-                        send_msg(scheduler_info, (char*)&nlen, NBYTES_PACKET_ERL);
-                        send_msg(scheduler_info, reply, len);
+                        send_msg(scheduler_info, reply, NBYTES_PACKET_ERL + len);
 
                         nreqs = 0;
                         break;
@@ -509,7 +515,6 @@ int handle_scheduler(FdInfo *info) {
                         reqs[nreqs].granted = 0;
                     }
                 }
-                printf(".\n");
                 if (nreqs != 0) {
                     job_add(atoi(job_id), nreqs, reqs);
                 }
@@ -554,19 +559,19 @@ int handle_scheduler(FdInfo *info) {
             else if (command != NULL && strncmp(command, "GET_NODES", strlen("GET_NODES")) == 0) {
                 printf("[handle_scheduler] GET_NODES.\n");
                                 
+                // Armamos el mensaje
                 char *buf = agent_manager_get_nodes();
-                len = sprintf(reply, "%s", buf);
-
-                // printf("len=%d, reply=%s.\n", len, reply);
-
+                len = sprintf(reply + NBYTES_PACKET_ERL, "%s", buf);
                 nlen = htons(len);
-                send_msg(scheduler_info, (char*)&nlen, NBYTES_PACKET_ERL);
-                send_msg(scheduler_info, reply, len);
+                memcpy(reply, (char*)&nlen, NBYTES_PACKET_ERL);
+
+                send_msg(scheduler_info, reply, NBYTES_PACKET_ERL + len);
 
                 printf("[handle_scheduler] tabla mandada (%s).\n", buf);
                 free(buf);
             }
             else {
+                pthread_mutex_unlock(&data->mutex_in);
                 return -1;
             }
 
@@ -581,5 +586,7 @@ int handle_scheduler(FdInfo *info) {
             // printf("len residual=%d, buf actual=%s.\n", data->len_buf_in, data->buf_in);
         }
     }
+    pthread_mutex_unlock(&data->mutex_in);
+
     return 0;
 }
