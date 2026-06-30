@@ -32,7 +32,8 @@ typedef struct {
 } fd_tcp_data;
 
 typedef struct {
-    char ip_port[INET_ADDRSTRLEN + PORTSTRLEN + 2]; 
+    char ip[INET_ADDRSTRLEN];
+    char port[PORTSTRLEN];
 } fd_node_timer_data;
 
 

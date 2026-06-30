@@ -54,14 +54,14 @@ int handle_tcp_epollout(FdInfo* info) {
 
 /* Maneja el evento en el timer para lanzar el anuncio */
 void handle_announce_timer(FdInfo* info) {
-    /* Vaciamos el fd */
+    // Vaciamos el fd 
     uint64_t nexpirations;
     read(info->fd, &nexpirations, sizeof(nexpirations));
 
-    /* Mandamos el anuncio */
+    // Mandamos el anuncio 
     send_announce();
 
-    /* Iniciamos el timer */
+    // Iniciamos el timer
     timerfd_start(info->fd, ANNOUNCE_SEC);
 }
 
@@ -281,7 +281,7 @@ void handle_agent_msg(FdInfo* info) {
 
 /* Maneja la desconexion inesperada de un agente */
 void handle_agent_disconnect(FdInfo* info) {
-    printf("handle_agent_disconnect (agent closed connection).\n");
+    printf("[handle_agent_disconnect] agent closed connection.\n");
     reservation_manager_release_by_socket(info->fd);
     close(info->fd); 
     fd_info_destr(info);
@@ -291,12 +291,11 @@ void handle_agent_disconnect(FdInfo* info) {
 nodo como caido */
 void handle_node_timer(FdInfo* info) { 
     int timerfd = info->fd;
-    char* ip_port = ((fd_node_timer_data*)(info->data))->ip_port;
-    char ip[INET_ADDRSTRLEN];
-    strncpy(ip, ip_port, INET_ADDRSTRLEN);
+    fd_node_timer_data* data = info->data;
+
     // Eliminamos el nodo de la tabla
-    agent_manager_delete(ip, ip_port+INET_ADDRSTRLEN);
-    
+    agent_manager_delete(data->ip, data->port);
+
     // Eliminamos el timer de epoll y lo cerramos
     epoll_ctl(epollfd, EPOLL_CTL_DEL, timerfd, NULL);
     close(timerfd);
@@ -352,17 +351,19 @@ void handle_announce(FdInfo* info) {
 
             // Agregamos el timer a la instancia epoll
             FdInfo *timer_info = epoll_add(timerfd, FD_NODE_TIMER, EPOLLIN | EPOLLET, NULL);
-            char *ip_port = ((fd_node_timer_data *)(timer_info->data))->ip_port;
-            snprintf(ip_port, INET_ADDRSTRLEN+PORTSTRLEN+2, "%s:%s", ip, port);
+            strcpy(((fd_node_timer_data *)(timer_info->data))->ip, ip);
+            strcpy(((fd_node_timer_data *)(timer_info->data))->port, port);
 
-            printf("handle_announce: nuevo agente %s res_count=%d ", 
-                ((fd_node_timer_data *)(timer_info->data))->ip_port, res_count);
-
+            printf("[handle_announce] nuevo agente %s:%s res_count=%d ", 
+                ((fd_node_timer_data *)(timer_info->data))->ip,
+                ((fd_node_timer_data *)(timer_info->data))->port,
+                res_count);
             printf("%s:%d", resources[0].name, resources[0].available);
             for (int i = 1; i < res_count; i++) {
                 printf(", %s:%d", resources[i].name, resources[i].available);
             }
             printf(".\n");
+
         }
         else {
             agent_manager_update(ip, port, resources);
