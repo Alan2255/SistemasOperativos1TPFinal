@@ -247,7 +247,6 @@ recibir_jobs_y_armar_peticiones(Socket, JobTimeout, Pid_wait_jobs, JobsActivos) 
 
 esperar_mapa_nodos(Socket, JobTimeout, Pid_wait_jobs, JobsActivos, JobID, Job, CantRecursos) ->
     receive
-        % CORREGIDO: Ahora matchea exactamente la tupla que envía tcp_deliver
         {tcp_nodes, BinList} -> 
             ListStr = binary_to_list(BinList),
             ListSinPrefijo = remover_prefijo_nodes(ListStr),
@@ -264,10 +263,11 @@ esperar_mapa_nodos(Socket, JobTimeout, Pid_wait_jobs, JobsActivos, JobID, Job, C
                     recibir_jobs_y_armar_peticiones(Socket, JobTimeout, Pid_wait_jobs, JobsActivos + 1)       
             end;
 
+        % (?) Esto debería estar acá? 
         {job_terminado, _IDTerminado} ->
             esperar_mapa_nodos(Socket, JobTimeout, Pid_wait_jobs, JobsActivos - 1, JobID, Job, CantRecursos)
 
-    after 5000 -> 
+    after JobTimeout -> 
         io:format("[scheduler] Error: Timeout esperando nodos del tcp_deliver para el Job ~s~n", [JobID]),
         Pid_wait_jobs ! {ok, Socket},
         recibir_jobs_y_armar_peticiones(Socket, JobTimeout, Pid_wait_jobs, JobsActivos)
@@ -383,7 +383,7 @@ inicializar_sistema(N, Puerto) ->
     % (!) Registrar este pid
     Pid_wait_jobs = spawn_link(?MODULE, wait_jobs, [N]), 
 
-    JobTimeout = 10000,
+    JobTimeout = 3000,
     spawn_link(?MODULE, supervisor_scheduler_jobs, [JobTimeout, Pid_wait_jobs, Socket, self()]),
     
     receive
