@@ -1,5 +1,5 @@
 -module(main).
--export([server/3, client/3, generate_jobs/1, scheduler_jobs/3]).
+-export([server/3, client/3, scheduler_jobs/3]).
 %nodos = host 
                  
 %Una vez llega a 0, termina.
@@ -34,7 +34,7 @@ generate_jobs(N) ->
         %     Recurso_ignorar = lists:nth(Indice_ignorar, ListRecursos),
 
         %     Recursos_elegidos = [R || R <- ListRecursos, R =/= Recurso_ignorar], %devuelve una lista sin el recurso ignorado
-        %     Cant_elegidas = aux:eliminar_indice(Indice_ignorar, ListMaximos), %lo hacemos asi pq de otra maner apodrias tener misma cant y no saber cual eliminar
+        %     Cant_elegidas = parser:eliminar_indice(Indice_ignorar, ListMaximos), %lo hacemos asi pq de otra maner apodrias tener misma cant y no saber cual eliminar
 
         %     [Recurso1, Recurso2] = Recursos_elegidos,
         %     [Cant1, Cant2] = Cant_elegidas,
@@ -64,7 +64,7 @@ generate_jobs(N) ->
 % handler_job es creado sin link ya que si muere o le pasa algo a ese job no nos importa queremos seguir atendiendo los proximos.
 % Recibe : JobTimeout(int), Pid_wait_jobs(Pid), Puerto(int)
 scheduler_jobs(JobTimeout, Pid_wait_jobs, Socket)->
-    aux:recibir_jobs_y_armar_peticiones(Socket, JobTimeout, Pid_wait_jobs, 0).
+    job_manager:recibir_jobs_y_armar_peticiones(Socket, JobTimeout, Pid_wait_jobs, 0).
 
 %Crea y linkea el proceso client
 % Recibe: Modo(atomo), N(int), Puerto(int) 
@@ -72,12 +72,26 @@ server(Modo, N, Puerto) ->
     Pid_client = spawn_link(?MODULE, client, [Modo, N, Puerto]), %Si el client muere el server se entera
     register(cliente_pid, Pid_client).
 
+manual_loop() ->
+    receive 
+            %Desde consola envias {"recursorandom:numrandom", Cant de recursos}. EJ: {"recursorandom:numrandom:recursorandom:numrandom" , 2}
+        {Job, Cant} ->
+                JobID_int = erlang:unique_integer([positive]), %genera un entero unico en toda la instancia actual del sistema(maq virtual BEAM)
+                JobID = integer_to_list(JobID_int),
+                pid_scheduler_job ! {JobID, Job, Cant},
+                manual_loop();
+
+        %Terminara cuando el usuario mande cliente_pid ! fin o cuando ya generaste N jobs q le pasaste como parametro
+        fin ->  ok 
+    end,
+        ets:delete(pendientes).%liberamos la tabla d procesos pendientes pq ya terminamos   
+
 
 %Inicializa el sistema y manda a generar los N jobs y espera a q terminen
 % Recibe: Modo(atomo), N(int), Puerto(int) 
 client(Modo, N, Puerto) ->
     
-    aux:inicializar_sistema(N, Puerto), %Inicializar sistema, y retorna una list de 3 int con los valores maximos d cada recurso
+    system_init:inicializar_sistema(N, Puerto), %Inicializar sistema, y retorna una list de 3 int con los valores maximos d cada recurso
     
     case Modo of
         random ->
@@ -88,18 +102,11 @@ client(Modo, N, Puerto) ->
             ets:delete(pendientes);%liberamos la tabla d procesos pendientes pq ya terminamos
 
         manual ->
-            %jobs los genera el usuario creando los jobs como el quiera y mandando msg a pid_scheduler_job,
-            % deben tener la forma de recursorandom:numrandom"
-            %Terminara cuando el usuario mande cliente_pid ! fin o cuando ya generaste N jobs q le pasaste como parametro
-            receive 
-                fin ->  ok 
-            end,
-            ets:delete(pendientes);%liberamos la tabla d procesos pendientes pq ya terminamos
+            manual_loop();
 
         _ -> 
             io:format("Los modos son: manual o random~n"),
             exit({modo_invalido, Modo})
     end.
-
 
 
