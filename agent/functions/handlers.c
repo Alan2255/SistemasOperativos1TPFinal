@@ -497,6 +497,8 @@ int handle_scheduler(FdInfo *info) {
 
                             agent_fdinfo = epoll_add(agent_sock, FD_AGENT, 
                                                     EPOLLIN | EPOLLET, NULL);
+                            ((fd_tcp_data*) agent_fdinfo->data)->len_buf_out = 0;
+                            ((fd_tcp_data*) agent_fdinfo->data)->len_buf_in = 0;
                             
                             agent_manager_set_fdinfo(ip, port, agent_fdinfo);
                         }
