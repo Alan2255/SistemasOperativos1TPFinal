@@ -59,7 +59,7 @@ recibir_jobs_y_armar_peticiones(Socket, JobTimeout, Pid_wait_jobs, JobsActivos) 
             io:format("[scheduler] Procesando Job ~s (~s) ~n", [JobID, Job]),
             
             % Solicitamos los nodos de forma asíncrona a C
-            tcp_connection:get_map_nodes(Socket),
+            tcp_connection:send_map_nodes_request(Socket),
             
             % Saltamos a un estado de espera específico para capturar la respuesta de tcp_deliver
            esperar_mapa_nodos(Socket, JobTimeout, Pid_wait_jobs, JobsActivos, JobID, Job, CantRecursos)

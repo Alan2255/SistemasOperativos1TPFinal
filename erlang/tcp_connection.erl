@@ -1,5 +1,5 @@
 -module(tcp_connection).
--export([connect_agent/1, get_map_nodes/1, tcp_deliver/2]).
+-export([connect_agent/1, send_map_nodes_request/1, tcp_deliver/2]).
 
 %=============================================== FUNCIONES TCP ===================================================
 
@@ -11,7 +11,7 @@ connect_agent(Puerto) ->
     end.
 
 % Devuelve un mapa de nodos
-get_map_nodes(Socket) -> 
+send_map_nodes_request(Socket) -> 
     case gen_tcp:send(Socket, <<"GET_NODES">>) of 
         ok -> ok;
         {error, Reason} -> exit({error_send_get_map_nodes, Reason})
