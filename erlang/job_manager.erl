@@ -243,7 +243,7 @@ binList_to_MapNodos(BinList) ->
 registrar_log(JobID, Job, Msg_resultado)-> 
     {{Y,M,D}, {H,Mi,S}} = calendar:local_time(), %obtiene la fecha 
     Linea = io_lib:format("~p-~p-~p ~p:~p:~p | Job ~p | ~s | ~s~n", [Y, M, D, H, Mi, S, JobID, Job, Msg_resultado]), %Devuelve un string para usarlo, a dif de io:format que imprime directo en la consola
-    file:write_file("scheduler.log", Linea , [append]). %append para q no se borre lo anterior
+    file:write_file("../scheduler.log", Linea , [append]). %append para q no se borre lo anterior
 
 %Borra el Job de la tabla de pendientes y registra su log.
 %Recibe: %JobID(string), Job(string), Msg(String)
