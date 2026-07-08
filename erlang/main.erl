@@ -59,6 +59,51 @@ generate_jobs(N) ->
         end,
     generate_jobs(N-1).%Ya generamos un job restamos el N de cantidad a generar y llamamos de nuevo a la funcion.
 
+generate_jobs2(N) -> 
+    JobID_int = erlang:unique_integer([positive]), %genera un entero unico en toda la instancia actual del sistema(maq virtual BEAM)
+    JobID = integer_to_list(JobID_int),
+    ListRecursos = ["cpu", "mem", "gpu"],
+    CantRandom = 100,
+    Eleccion_recursos = rand:uniform(3), %random entre 1 y N (inclusive), elije cuantos recursos va a pedir
+    
+    case Eleccion_recursos of
+        1 ->
+            Indice_recurso = rand:uniform(3),
+            Recurso = lists:nth(Indice_recurso, ListRecursos),
+            Cantidad = integer_to_list(rand:uniform(CantRandom)),%Cant random del recurso elegido de 1 hasta lo max q pueda pedir
+
+            Job = Recurso ++ ":" ++ Cantidad, %esto crea el Job EJ : "recursorandom:numrandom"
+            pid_scheduler_job ! {JobID, Job, 1},
+            io:format("[job_generator] ~p ~p ~p ~n",[JobID, Job, 1]);
+
+         2 ->    
+             Indice_ignorar = rand:uniform(3),
+             Recurso_ignorar = lists:nth(Indice_ignorar, ListRecursos),
+
+             Recursos_elegidos = [R || R <- ListRecursos, R =/= Recurso_ignorar], %devuelve una lista sin el recurso ignorado
+             %Cant_elegidas = parser:eliminar_indice(Indice_ignorar, ListRecursos), %lo hacemos asi pq de otra maner apodrias tener misma cant y no saber cual eliminar
+
+             [Recurso1, Recurso2] = Recursos_elegidos,
+             Cantidad1 = integer_to_list(rand:uniform(CantRandom)),
+             Cantidad2 = integer_to_list(rand:uniform(CantRandom)),
+            
+             Job = Recurso1 ++ ":" ++ Cantidad1 ++ ":" ++ Recurso2 ++ ":" ++ Cantidad2,
+             pid_scheduler_job ! {JobID, Job, 2};
+
+         3 ->
+             Recurso1 = "cpu",
+             Cantidad1 = integer_to_list(rand:uniform(CantRandom)),%Cant random del recurso elegido de 1 hasta lo max q pueda pedir
+
+             Recurso2 = "mem",
+             Cantidad2 = integer_to_list(rand:uniform(CantRandom)),
+
+             Recurso3 = "gpu",
+             Cantidad3 = integer_to_list(rand:uniform(CantRandom)),
+
+             Job = Recurso1 ++ ":" ++ Cantidad1 ++ ":" ++ Recurso2 ++ ":" ++ Cantidad2 ++ ":" ++  Recurso3 ++ ":" ++ Cantidad3,
+             pid_scheduler_job ! {JobID, Job, 3}
+        end,
+    generate_jobs2(N-1).%Ya generamos un job restamos el N de cantidad a generar y llamamos de nuevo a la funcion.
 
 % Recibe por mensaje JobID(int), Job(string), CantRecursos(int) y crea SIN LINK un proceso que maneje este job, se vuelve a llamar recursivamente para seguir atendiendo jobs
 % handler_job es creado sin link ya que si muere o le pasa algo a ese job no nos importa queremos seguir atendiendo los proximos.
@@ -72,15 +117,17 @@ server(Modo, N, Puerto) ->
     Pid_client = spawn_link(?MODULE, client, [Modo, N, Puerto]), %Si el client muere el server se entera
     register(cliente_pid, Pid_client).
 
-manual_loop() ->
-    receive 
-            %Desde consola envias {"recursorandom:numrandom", Cant de recursos}. EJ: {"recursorandom:numrandom:recursorandom:numrandom" , 2}
-        {Job, Cant} ->
+manual_loop(Socket) -> %Asi deberia quedar el string a mandar a C  JOB_REQUEST 1001 192.168.1.2:cpu:2 192.168.1.3:gpu:1
+    receive     
+        %Desde consola envias el JOB entero por ej: {"192.168.1.2:cpu:2 192.168.1.3:gpu:1"}.
+        {Job} ->
                 JobID_int = erlang:unique_integer([positive]), %genera un entero unico en toda la instancia actual del sistema(maq virtual BEAM)
                 JobID = integer_to_list(JobID_int),
-                pid_scheduler_job ! {JobID, Job, Cant},
-                manual_loop();
-
+                Msg_REQUEST = "JOB_REQUEST" ++ " " ++ JobID ++ " " ++ Job,
+                Msg_RELEASE = "JOB_RELEASE" ++ " " ++ JobID,
+                %Pasamos 0 en CantRecusos pq no importan y ademas procesar_respuesta los ignora. 
+                spawn(job_manager, handler_job, [JobID, Job, 0, 3000, Socket, Msg_REQUEST, Msg_RELEASE]), %Manda el msg al agente espera su rta y la maneja
+                manual_loop(Socket);
         %Terminara cuando el usuario mande cliente_pid ! fin o cuando ya generaste N jobs q le pasaste como parametro
         fin ->  ok 
     end,
@@ -91,7 +138,7 @@ manual_loop() ->
 % Recibe: Modo(atomo), N(int), Puerto(int) 
 client(Modo, N, Puerto) ->
     
-    system_init:inicializar_sistema(N, Puerto), %Inicializar sistema, y retorna una list de 3 int con los valores maximos d cada recurso
+    Socket = system_init:inicializar_sistema(N, Puerto), %Inicializar sistema, y retorna una list de 3 int con los valores maximos d cada recurso
     
     case Modo of
         random ->
@@ -102,7 +149,7 @@ client(Modo, N, Puerto) ->
             ets:delete(pendientes);%liberamos la tabla d procesos pendientes pq ya terminamos
 
         manual ->
-            manual_loop();
+            manual_loop(Socket); %Mismo socket que usa tcp_deliver
 
         _ -> 
             io:format("Los modos son: manual o random~n"),

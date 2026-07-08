@@ -1,12 +1,12 @@
 -module(job_manager).
--export([handler_job/8, recibir_jobs_y_armar_peticiones/4, armar_peticiones/4, wait_jobs/1]).
+-export([handler_job/7, recibir_jobs_y_armar_peticiones/4, armar_peticiones/4, wait_jobs/1]).
 
 %=============================================== FUNCIONES SOBRE JOBS ===================================================
 
 %Recibe la respuesta de la peticion del job enviado y maneja que hacer en cada caso, cuando termina un job, lo elimina de la tabla de Pendientes, registra su log y envia -
 %- msg a wait_jobs avisando que termino.
 % Recibe: JobID(string), Job(string), CantRecursos(int), Socket(int), Msg_Release(string), JobTimeuot(int en milisegundos), Pid_wait_jobs(Pid).
-procesar_respuesta(JobID, Job, _CantRecursos, Socket, Msg_RELEASE, JobTimeout, Pid_wait_jobs) ->
+procesar_respuesta(JobID, Job, _CantRecursos, Socket, Msg_RELEASE, JobTimeout) ->
     receive 
         {tcp_msg, Bin} -> 
             case binary_to_list(Bin) of
@@ -16,18 +16,18 @@ procesar_respuesta(JobID, Job, _CantRecursos, Socket, Msg_RELEASE, JobTimeout, P
                     timer:sleep(2000),
                     io:format("Trabajo finalizado!.~n"),
                     gen_tcp:send(Socket, list_to_binary(Msg_RELEASE)),
-                    pid_scheduler_job ! {job_terminado, JobID},
-                    Pid_wait_jobs ! {ok, Socket};
+                    pid_scheduler_job ! {job_terminado, JobID};
+                    %Pid_wait_jobs ! {ok, Socket};
 
                 "JOB_DENIED " ++ _Rest -> 
                     borrarPendiente_and_registrarLog(JobID, Job, "JOB_DENIED"),
-                    pid_scheduler_job ! {job_terminado, JobID},
-                    Pid_wait_jobs ! {ok, Socket};
+                    pid_scheduler_job ! {job_terminado, JobID};
+                    %Pid_wait_jobs ! {ok, Socket};
                 
                 Invalido ->
                     io:format("Formato de mensaje no esperado por el handler: ~p~n", [Invalido]),
-                    pid_scheduler_job ! {job_terminado, JobID}, 
-                    Pid_wait_jobs ! {ok, Socket}
+                    pid_scheduler_job ! {job_terminado, JobID}
+                    %Pid_wait_jobs ! {ok, Socket}
             end
     after JobTimeout -> 
         borrarPendiente_and_registrarLog(JobID, Job, "POSIBLE DEADLOCK"),
@@ -39,10 +39,10 @@ procesar_respuesta(JobID, Job, _CantRecursos, Socket, Msg_RELEASE, JobTimeout, P
 
 % Retorna: Lista de tuplas de la forma [{Nodo1, CantidadTomada}, {Nodo2, CantidadTomada2}, etc] si pudo repartir el recurso        
 %manda el msg al agente espera su respuesta y la maneja
-handler_job(JobID, Job, CantRecursos, JobTimeout, Pid_wait_jobs, Socket, Msg_REQUEST, Msg_RELEASE) ->
+handler_job(JobID, Job, CantRecursos, JobTimeout, Socket, Msg_REQUEST, Msg_RELEASE) ->
     gen_tcp:send(Socket, list_to_binary(Msg_REQUEST)),
     ets:insert(pendientes, {JobID, Job, self()}),
-    procesar_respuesta(JobID, Job, CantRecursos, Socket, Msg_RELEASE, JobTimeout, Pid_wait_jobs).
+    procesar_respuesta(JobID, Job, CantRecursos, Socket, Msg_RELEASE, JobTimeout).
 
 % Cada vez q recibe un job arma la peticion y crea un proceso (conectado al mismo agente) para q mande y espere la rta del job
 % se llama recursivamente para seguir atendiendo jobs
@@ -73,11 +73,11 @@ esperar_mapa_nodos(Socket, JobTimeout, Pid_wait_jobs, JobsActivos, JobID, Job, C
 
             case armar_peticiones(JobID, Job, CantRecursos, MapNodos) of
                 {error, no_alcanza} -> 
-                    Pid_wait_jobs ! {ok, Socket},
+                    %Pid_wait_jobs ! {ok, Socket},
                     recibir_jobs_y_armar_peticiones(Socket, JobTimeout, Pid_wait_jobs, JobsActivos);
 
                 {Msg_REQUEST, Msg_RELEASE} -> 
-                    spawn(job_manager, handler_job, [JobID, Job, CantRecursos, JobTimeout, Pid_wait_jobs, Socket, Msg_REQUEST, Msg_RELEASE]),
+                    spawn(job_manager, handler_job, [JobID, Job, CantRecursos, JobTimeout, Socket, Msg_REQUEST, Msg_RELEASE]),
                     recibir_jobs_y_armar_peticiones(Socket, JobTimeout, Pid_wait_jobs, JobsActivos + 1) % +1 JobActivo       
             end;
 
@@ -87,7 +87,7 @@ esperar_mapa_nodos(Socket, JobTimeout, Pid_wait_jobs, JobsActivos, JobID, Job, C
 
     after JobTimeout -> 
         io:format("[scheduler] Error: Timeout esperando nodos del tcp_deliver para el Job ~s~n", [JobID]),
-        Pid_wait_jobs ! {ok, Socket},
+        %Pid_wait_jobs ! {ok, Socket},
         recibir_jobs_y_armar_peticiones(Socket, JobTimeout, Pid_wait_jobs, JobsActivos)
     end.
 
