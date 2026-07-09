@@ -11,7 +11,6 @@
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <sys/timerfd.h>
 #include <sys/socket.h>
 #include <sys/sysinfo.h>
 #include <sys/un.h>
@@ -20,8 +19,8 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include "consts.h"
-#include "structures/fdinfo.h"
 #include "structures/hash.h"
+#include "structures/fd_table.h"
 #include "structures/local_resources.h"
 #include "structures/table_agent.h"
 #include "structures/table_job.h"
@@ -38,7 +37,7 @@ uint16_t puerto_tcp = -1;
 int epollfd = -1;
 int udp_sock = -1;
 int scheduler_fd = -1;
-FdInfo *scheduler_info;
+uint64_t scheduler_id = UINT64_MAX;
 
 int main(int argc, char* argv[]) {
     /* Obtenemos y seteamos: el puerto y los recursos locales*/
@@ -51,8 +50,16 @@ int main(int argc, char* argv[]) {
 
     /* Iniciamos la instancia epoll */
     epollfd = epoll_create1(0);
-    if (epollfd == -1)
+    if (epollfd == -1) {
+        perror("epoll_create1");
         return -1;
+    }
+
+    /* Iniciamos las tablas */
+    agent_manager_init();
+    job_manager_init();
+    reservation_manager_init();
+    fd_table_init();
 
     /* Iniciamos los sockets */
     int scheduler_listen_sock = init_scheduler_listen_sock();
@@ -60,30 +67,18 @@ int main(int argc, char* argv[]) {
     udp_sock = init_udp_sock();
     
     if (udp_sock == -1 || scheduler_listen_sock == -1 
-                       || agents_listen_sock == -1)
+                       || agents_listen_sock == -1) {
+        perror("init socks");
         return -1;
-
-    /* Iniciamos las tablas */
-    agent_manager_init();
-    job_manager_init();
-    reservation_manager_init();
+    }  
 
     /* Mandamos el anuncio y esperamos 2 segundos */ 
     send_announce();
     sleep(2);
 
-    /* Seteamos un timer y lo agregamos a epoll para enviar el
-    proximo */
-    int timerfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
-    if (timerfd == -1)
+    /* Seteamos un timer y lo agregamos a epoll para enviar el proximo anuncio */
+    if (init_announce_timer() == -1)
         return -1;
-
-    FdInfo* timerfd_info = epoll_add(timerfd, FD_SEND_ANNOUNCE_TIMER, EPOLLIN | EPOLLET, NULL);
-    if (timerfd_info == NULL)
-        return -1;
-    if (timerfd_start(timerfd, ANNOUNCE_SEC) == -1)
-        return -1;
-
 
     /* Iniciamos los threads */
     pthread_t threads[N_THREADS];

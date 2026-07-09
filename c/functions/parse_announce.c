@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "../consts.h"
-#include "../structures/fdinfo.h"
 #include "../structures/table_reservation.h"
 #include "functions.h"
 

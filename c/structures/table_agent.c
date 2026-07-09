@@ -43,7 +43,7 @@ void agent_manager_add(char* ip, char* port, int count_resources, Resource* reso
     strncpy(nuevo_nodo->port, port, PORTSTRLEN - 1);
     nuevo_nodo->port[PORTSTRLEN - 1] = '\0';
     
-    nuevo_nodo->fdinfo = NULL;
+    nuevo_nodo->id = UINT64_MAX;
     nuevo_nodo->count_resources = count_resources;
     nuevo_nodo->timerfd = timerfd;
 
@@ -73,28 +73,23 @@ AgentNode* agent_manager_get(char* ip, char* port) {
     return hash_get(table_agent, key);
 }
 
-// Busca un agente por su ip y puerto y devuelve su socket si existe
-FdInfo* agent_manager_get_fdinfo(char* ip, char* port) {
-    if (!table_agent) return NULL;
+// Busca un agente por su ip y puerto y devuelve el identificador de su
+// conexion, o UINT64_MAX si no tiene una conexion activa
+uint64_t agent_manager_get_id(char* ip, char* port) {
+    if (!table_agent) return UINT64_MAX;
     AgentNode *node = agent_manager_get(ip, port);
-    if (node == NULL) return NULL;
-    return node->fdinfo;
+    if (node == NULL) return UINT64_MAX;
+    return node->id;
 }
 
-// Busca un agente por su ip y puerto y actualiza su fdinfo
-void agent_manager_set_fdinfo(const char *ip, const char *port, FdInfo* newFdinfo) {
+// Busca un agente por su ip y puerto y actualiza el identificador de su conexion
+void agent_manager_set_id(const char *ip, const char *port, uint64_t id) {
     if (!table_agent) return;
 
     AgentNode *agente = agent_manager_get((char*)ip, (char*)port);
     if (agente == NULL) return;
-    
-    if (agente->fdinfo != NULL) {
-        if (agente->fdinfo->data != NULL) {
-            free(agente->fdinfo->data);
-        }
-        free(agente->fdinfo);
-    }
-    agente->fdinfo = newFdinfo;
+
+    agente->id = id;
 }
 
 // Busca un agente por su ip y puerto y actualiza sus recursos
@@ -143,14 +138,14 @@ void agent_manager_delete(const char *ip, const char *port) {
     hash_remove(table_agent, key);
 }
 
-// Busca un agente por el fd de su conexion y copia su ip y puerto
-int agent_manager_get_addr_by_fd(int fd, char* ip, char* port) {
-    if (!table_agent || !ip || !port) return -1;
+// Busca un agente por el identificador de su conexion y copia su ip y puerto
+int agent_manager_get_addr_by_id(uint64_t id, char* ip, char* port) {
+    if (!table_agent || !ip || !port || id == UINT64_MAX) return -1;
 
     for (int i = 0; i < table_agent->used; i++) {
         if (table_agent->entries[i].key == NULL) continue;
         AgentNode *agente = (AgentNode*)table_agent->entries[i].value;
-        if (agente->fdinfo != NULL && agente->fdinfo->fd == fd) {
+        if (agente->id == id) {
             strncpy(ip, agente->ip, INET_ADDRSTRLEN - 1);
             ip[INET_ADDRSTRLEN - 1] = '\0';
             strncpy(port, agente->port, PORTSTRLEN - 1);

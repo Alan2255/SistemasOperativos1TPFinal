@@ -1,12 +1,12 @@
 #include "../consts.h"
-#include "../structures/fdinfo.h"
+#include "../structures/fd_table.h"
 #include <pthread.h>
 #include <string.h>
 #include <stdio.h>
 
 
 /* Anade el string al buffer 'buf_out' de 'info'. */
-int add_to_buffer(FdInfo* info, char* msg, int len) {
+int add_to_buffer(FdEntry* info, char* msg, int len) {
     fd_tcp_data* data = info->data;
 
     if (len < TAM_BUF - data->len_buf_out) {

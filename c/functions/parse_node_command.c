@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "../consts.h"
-#include "../structures/fdinfo.h"
 #include "functions.h"
 
 /* Parsea un comando enviado por otro nodo */

@@ -1,12 +1,13 @@
 #include <sys/socket.h>
-#include <sys/socket.h>
 #include <sys/epoll.h>
+#include <sys/timerfd.h>
 #include <netinet/in.h>
 #include <stdlib.h>
 #include "../consts.h"
-#include "../structures/fdinfo.h"
+#include "../structures/fd_table.h"
 #include "functions.h"
 #include <asm-generic/socket.h>
+#include <bits/time.h>
 
 /* Inicia un socket no bloqueante del tipo dado, lo bindea a la direccion dada 
 y lo agrega a la instancia epoll con el tipo de dato dado. */
@@ -26,7 +27,7 @@ int init_sock(int type, int ip, int port, fdtype typedata) {
                     sizeof(yes)) == -1)
         return -1;
 
-    /* Bind */
+    // Bind
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(ip);
@@ -34,9 +35,16 @@ int init_sock(int type, int ip, int port, fdtype typedata) {
     if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) == -1)
         return -1;
 
-    /* Agregamos a la instancia epoll */
-    if (epoll_add(sock, typedata, EPOLLET | EPOLLIN, NULL) == NULL)
+    // Agregamos el socket a la tabla de conexiones
+    uint64_t id = fd_table_add(sock, typedata);
+    if (id == UINT64_MAX)
         return -1;
+
+    // Agregamos el socket a la instancia epoll
+    if (epoll_add(sock, EPOLLET | EPOLLIN, id) == -1) {
+        fd_table_undo_add(sock);
+        return -1;
+    }
 
     return sock;
 }
@@ -73,4 +81,27 @@ int init_scheduler_listen_sock() {
         return -1;
 
     return sock;
+}
+
+/* Inicia el timer que dispara el reenvio periodico del anuncio y lo
+agrega a la instancia epoll. Retorna el timerfd creado, o -1 en caso
+de error. */
+int init_announce_timer(void) {
+    int timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
+    if (timer_fd == -1) {
+        return -1;
+    }
+
+    uint64_t id = fd_table_add(timer_fd, FD_SEND_ANNOUNCE_TIMER);
+    if (id == UINT64_MAX) {
+        return -1;
+    }
+    if (epoll_add(timer_fd, EPOLLIN | EPOLLET, id) == -1) {
+        return -1;
+    }
+    if (timerfd_start(timer_fd, ANNOUNCE_SEC) == -1) {
+        return -1;
+    }
+
+    return timer_fd;
 }
