@@ -1,5 +1,5 @@
-#ifndef AGENT_MANAGER_H
-#define AGENT_MANAGER_H
+#ifndef AGENT_table_H
+#define AGENT_table_H
 
 #include <stdint.h>
 #include "../consts.h"
@@ -24,43 +24,43 @@ typedef struct {
 // --- API del tabla de agentes ---
 
 // Crea la tabla de agentes
-void agent_manager_init(void);
+void agent_table_init(void);
 
 // Destruye la tabla de agentes
-void agent_manager_shutdown(void);
+void agent_table_shutdown(void);
 
 // Agrega un agente
-void agent_manager_add(char* ip, char* port, int count_resources, Resource* resources, int timerfd);
+void agent_table_add(char* ip, char* port, int count_resources, Resource* resources, int timerfd);
 
 // Busca un agente por su ip y puerto y devuelve un puntero al mismo si existe
-AgentNode* agent_manager_get(char* ip, char* port);
+AgentNode* agent_table_get(char* ip, char* port);
 
 // Busca un agente por su ip y puerto y devuelve el identificador de su
 // conexion, o UINT64_MAX si no tiene una conexion activa
-uint64_t agent_manager_get_id(char* ip, char* port);
+uint64_t agent_table_get_id(char* ip, char* port);
 
 // Busca un agente por su ip y puerto y actualiza el identificador de su conexion
-void agent_manager_set_id(const char *ip, const char *port, uint64_t id);
+void agent_table_set_id(const char *ip, const char *port, uint64_t id);
 
 // Busca el agente con el identificador dado y reinicia su id (UINT64_MAX)
-void agent_manager_clear_id(uint64_t id);
+void agent_table_clear_id(uint64_t id);
 
 // Busca un agente por su ip y puerto y actualiza sus recursos
-void agent_manager_update(char* ip, char* port, Resource* resources);
+void agent_table_update(char* ip, char* port, Resource* resources);
 
 // Busca un agente por su ip y puerto y devuelve su timerfd si existe
-int agent_manager_get_timerfd(const char *ip, const char *port);
+int agent_table_get_timerfd(const char *ip, const char *port);
 
 // Busca un agente por su ip y puerto y actualiza su timerfd
-void agent_manager_set_timerfd(const char *ip, const char *port, int newTimerfd);
+void agent_table_set_timerfd(const char *ip, const char *port, int newTimerfd);
 
 // Elimina un agente
-void agent_manager_delete(const char *ip, const char *port);
+void agent_table_delete(const char *ip, const char *port);
 
 // Convierte la tabla de agentes en un string con las capacidades de los recursos
-char* agent_manager_get_nodes();
+char* agent_table_get_nodes();
 
 // Busca un agente por el identificador de su conexion y copia su ip y puerto
-int agent_manager_get_addr_by_id(uint64_t id, char* ip, char* port);
+int agent_table_get_addr_by_id(uint64_t id, char* ip, char* port);
 
 #endif

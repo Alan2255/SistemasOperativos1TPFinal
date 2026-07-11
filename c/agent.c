@@ -56,9 +56,9 @@ int main(int argc, char* argv[]) {
     }
 
     /* Iniciamos las tablas */
-    agent_manager_init();
-    job_manager_init();
-    reservation_manager_init();
+    agent_table_init();
+    job_table_init();
+    reservation_table_init();
     fd_table_init();
 
     /* Iniciamos los sockets */

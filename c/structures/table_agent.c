@@ -9,14 +9,14 @@ static void make_key(const char *ip, const char *port, char *buf, size_t bufsize
 }
 
 // Crea la tabla de agentes
-void agent_manager_init() {
+void agent_table_init() {
     if (table_agent == NULL) {
         table_agent = hash_create();
     }
 }
 
 // Destruye la tabla de agentes
-void agent_manager_shutdown() {
+void agent_table_shutdown() {
     if (!table_agent) return;
     
     for (int i = 0; i < table_agent->used; i++) {
@@ -31,7 +31,7 @@ void agent_manager_shutdown() {
 }
 
 // Agrega un agente
-void agent_manager_add(char* ip, char* port, int count_resources, Resource* resources, int timerfd) {
+void agent_table_add(char* ip, char* port, int count_resources, Resource* resources, int timerfd) {
     if (!table_agent) return;
 
     AgentNode *nuevo_nodo = malloc(sizeof(AgentNode));
@@ -66,7 +66,7 @@ void agent_manager_add(char* ip, char* port, int count_resources, Resource* reso
 }
 
 // Busca un agente por su ip y puerto y lo devuelve si existe
-AgentNode* agent_manager_get(char* ip, char* port) {
+AgentNode* agent_table_get(char* ip, char* port) {
     if (!table_agent) return NULL;
     char key[KEY_LEN];
     make_key(ip, port, key, sizeof(key));
@@ -75,25 +75,25 @@ AgentNode* agent_manager_get(char* ip, char* port) {
 
 // Busca un agente por su ip y puerto y devuelve el identificador de su
 // conexion, o UINT64_MAX si no tiene una conexion activa
-uint64_t agent_manager_get_id(char* ip, char* port) {
+uint64_t agent_table_get_id(char* ip, char* port) {
     if (!table_agent) return UINT64_MAX;
-    AgentNode *node = agent_manager_get(ip, port);
+    AgentNode *node = agent_table_get(ip, port);
     if (node == NULL) return UINT64_MAX;
     return node->id;
 }
 
 // Busca un agente por su ip y puerto y actualiza el identificador de su conexion
-void agent_manager_set_id(const char *ip, const char *port, uint64_t id) {
+void agent_table_set_id(const char *ip, const char *port, uint64_t id) {
     if (!table_agent) return;
 
-    AgentNode *agente = agent_manager_get((char*)ip, (char*)port);
+    AgentNode *agente = agent_table_get((char*)ip, (char*)port);
     if (agente == NULL) return;
 
     agente->id = id;
 }
 
 // Busca el agente con el identificador dado y reinicia su id (UINT64_MAX)
-void agent_manager_clear_id(uint64_t id) {
+void agent_table_clear_id(uint64_t id) {
     if (!table_agent || id == UINT64_MAX) return;
 
     for (int i = 0; i < table_agent->used; i++) {
@@ -107,20 +107,20 @@ void agent_manager_clear_id(uint64_t id) {
 }
 
 // Busca un agente por su ip y puerto y actualiza sus recursos
-void agent_manager_update(char* ip, char* port, Resource* resources) {
+void agent_table_update(char* ip, char* port, Resource* resources) {
     if (!table_agent || resources == NULL) return;
 
-    AgentNode *agente = agent_manager_get(ip, port);
+    AgentNode *agente = agent_table_get(ip, port);
     if (agente != NULL) {
         memcpy(agente->resources, resources, agente->count_resources * sizeof(Resource));
     }
 }
 
 // Busca un agente por su ip y puerto y devuelve su timerfd si existe
-int agent_manager_get_timerfd(const char *ip, const char *port) {
+int agent_table_get_timerfd(const char *ip, const char *port) {
     if (!table_agent) return -2;
 
-    AgentNode *agente = agent_manager_get((char*)ip, (char*)port);
+    AgentNode *agente = agent_table_get((char*)ip, (char*)port);
     if (agente == NULL) {
         return -2;
     }
@@ -129,20 +129,20 @@ int agent_manager_get_timerfd(const char *ip, const char *port) {
 }
 
 // Busca un agente por su ip y puerto y actualiza su timerfd
-void agent_manager_set_timerfd(const char *ip, const char *port, int newTimerfd) {
+void agent_table_set_timerfd(const char *ip, const char *port, int newTimerfd) {
     if (!table_agent) return;
 
-    AgentNode *agente = agent_manager_get((char*)ip, (char*)port);
+    AgentNode *agente = agent_table_get((char*)ip, (char*)port);
     if (agente == NULL) return;
 
     agente->timerfd = newTimerfd;
 }
 
 // Elimina un agente
-void agent_manager_delete(const char *ip, const char *port) {
+void agent_table_delete(const char *ip, const char *port) {
     if (!table_agent) return;
 
-    AgentNode *agente = agent_manager_get((char*)ip, (char*)port);
+    AgentNode *agente = agent_table_get((char*)ip, (char*)port);
     if (agente != NULL) {
         free(agente);
     }
@@ -153,7 +153,7 @@ void agent_manager_delete(const char *ip, const char *port) {
 }
 
 // Busca un agente por el identificador de su conexion y copia su ip y puerto
-int agent_manager_get_addr_by_id(uint64_t id, char* ip, char* port) {
+int agent_table_get_addr_by_id(uint64_t id, char* ip, char* port) {
     if (!table_agent || !ip || !port || id == UINT64_MAX) return -1;
 
     for (int i = 0; i < table_agent->used; i++) {
@@ -171,7 +171,7 @@ int agent_manager_get_addr_by_id(uint64_t id, char* ip, char* port) {
 }
 
 // Convierte la tabla de agentes en un string con las capacidades de los recursos
-char* agent_manager_get_nodes() {
+char* agent_table_get_nodes() {
     if (!table_agent || table_agent->used == 0) {
         char *vacio = malloc(6); 
         if (vacio) strcpy(vacio, "NODES");

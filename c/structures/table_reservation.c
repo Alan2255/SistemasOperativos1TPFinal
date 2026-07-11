@@ -10,14 +10,14 @@ static void fun_hash(int job_id, char *out_key, size_t max_len) {
 }
 
 // Crea la tabla de reservas
-void reservation_manager_init(void) {
+void reservation_table_init(void) {
     if (table_reservation == NULL) {
         table_reservation = hash_create();
     }
 }
 
 // Destruye la tabla de reservas
-void reservation_manager_shutdown(void) {
+void reservation_table_shutdown(void) {
     if (!table_reservation) return;
 
     for (int i = 0; i < table_reservation->used; i++) {
@@ -32,7 +32,7 @@ void reservation_manager_shutdown(void) {
 }
 
 // Agrega una reserva
-bool reservation_manager_add(int job_id, int src_fd, const char* res_name, int amount, int granted) {
+bool reservation_table_add(int job_id, int src_fd, const char* res_name, int amount, int granted) {
     if (!table_reservation || !res_name) return false;
 
     reservation_t *nueva_reserva = malloc(sizeof(reservation_t));
@@ -58,7 +58,7 @@ bool reservation_manager_add(int job_id, int src_fd, const char* res_name, int a
 }
 
 // Elimina una reserva
-bool reservation_manager_release(int job_id) {
+bool reservation_table_release(int job_id) {
     if (!table_reservation) return false;
 
     char key[32];
@@ -73,7 +73,7 @@ bool reservation_manager_release(int job_id) {
 }
 
 // Cambia el estado de una reserva
-bool reservation_manager_set_granted(int job_id, int granted) {
+bool reservation_table_set_granted(int job_id, int granted) {
     if (!table_reservation) return false;
 
     char key[32];
@@ -87,7 +87,7 @@ bool reservation_manager_set_granted(int job_id, int granted) {
 }
 
 // Busca una reserva por ID 
-reservation_t* reservation_manager_get(int job_id) {
+reservation_t* reservation_table_get(int job_id) {
     if (!table_reservation) return NULL;
 
     char key[32];
@@ -97,7 +97,7 @@ reservation_t* reservation_manager_get(int job_id) {
 }
 
 // Elimina todas las reservas asociadas a un socket (src_fd)
-void reservation_manager_release_by_socket(int src_fd) {
+void reservation_table_release_by_socket(int src_fd) {
     if (!table_reservation) return;
 
     // Recorremos el arreglo interno de la tabla hash

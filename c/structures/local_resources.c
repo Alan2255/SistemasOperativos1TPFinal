@@ -116,7 +116,7 @@ void local_resources_release( int job_id, int source_fd, char* resource_name, in
     Resource* resource = find_resource(resource_name);
     if (!resource) return;
 
-    reservation_t * reservation = reservation_manager_get(job_id);
+    reservation_t * reservation = reservation_table_get(job_id);
     if (!reservation) return;
 
     pthread_mutex_lock(&resource->mutex);
@@ -157,7 +157,7 @@ void local_resources_release( int job_id, int source_fd, char* resource_name, in
     // Atiende los pedidos pendientes 
     while (!queue_is_empty(&resource->job_pendings)) {
         int next_job_id = queue_top(&resource->job_pendings);
-        reservation_t* next_res = reservation_manager_get(next_job_id);
+        reservation_t* next_res = reservation_table_get(next_job_id);
         
         if (next_res == NULL) {
             queue_pop(&resource->job_pendings);
@@ -167,7 +167,7 @@ void local_resources_release( int job_id, int source_fd, char* resource_name, in
         if (resource->available >= next_res->amount) {
             queue_pop(&resource->job_pendings);
             resource->available -= next_res->amount;
-            reservation_manager_set_granted(next_job_id, 1);
+            reservation_table_set_granted(next_job_id, 1);
         } else {
             break;
         }

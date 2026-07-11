@@ -8,8 +8,8 @@
 las reservas de recursos locales que se le concedieron o quedaron encoladas
 y pide el cierre del fd. */
 void close_agent_conn(uint64_t id, FdEntry *info) {
-    agent_manager_clear_id(id);
-    reservation_manager_release_by_socket(info->fd);
+    agent_table_clear_id(id);
+    reservation_table_release_by_socket(info->fd);
     fd_table_request_close(info);
 }
 
@@ -20,7 +20,7 @@ void close_scheduler_conn(FdEntry *info) {
     if (table_job) {
         for (int i = 0; i < table_job->used; i++) {
             if (table_job->entries[i].value == NULL) continue;
-            job_release_((job_table_t*)table_job->entries[i].value);
+            job_table_release_((job_table_t*)table_job->entries[i].value);
         }
     }
 

@@ -153,7 +153,7 @@ void handle_node_timer(FdEntry* info) {
     fd_node_timer_data* data = info->data;
 
     // Eliminamos el nodo de la tabla
-    agent_manager_delete(data->ip, data->port);
+    agent_table_delete(data->ip, data->port);
 
     // Eliminamos el timer de epoll, lo cerramos y liberamos su id
     fd_table_request_close(info);
@@ -259,7 +259,7 @@ void handle_announce(FdEntry* info) {
         // printf("puerto: %s, agent_table->timerfd=",port);
 
         /* Agregamos o actualizamos el nodo en la tabla */
-        int timerfd = agent_manager_get_timerfd(ip, port);
+        int timerfd = agent_table_get_timerfd(ip, port);
 
         // printf("%d.\n", timerfd);
 
@@ -268,7 +268,7 @@ void handle_announce(FdEntry* info) {
             timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
 
             // Agregamos el nodo a la tabla
-            agent_manager_add(ip, port, res_count, resources, timerfd);
+            agent_table_add(ip, port, res_count, resources, timerfd);
 
             // Agregamos el timer a la instancia epoll
             uint64_t timer_id = fd_table_add(timerfd, FD_NODE_TIMER);
@@ -299,7 +299,7 @@ void handle_announce(FdEntry* info) {
             fd_table_dec_and_release(timer_entry);
         }
         else {
-            agent_manager_update(ip, port, resources);
+            agent_table_update(ip, port, resources);
         }
 
         /* Iniciamos/reiniciamos el timer */
@@ -327,10 +327,10 @@ static void reserve(uint64_t id, FdEntry *info, char *job_id_str, char *res, cha
                 close_agent_conn(id, info);
             break;
         case 1: // Se encolo
-            reservation_manager_add(job_id, info->fd, res, amount, 0);
+            reservation_table_add(job_id, info->fd, res, amount, 0);
             break;
         case 0: // Se concedio
-            reservation_manager_add(job_id, info->fd, res, amount, 1);
+            reservation_table_add(job_id, info->fd, res, amount, 1);
             len = sprintf(reply, "GRANTED %d\n", job_id);
             if (send_msg(id, info, reply, len) == -1)
                 close_agent_conn(id, info);
@@ -348,10 +348,10 @@ static void granted(uint64_t id, char *job_id_str) {
 
     char ip[INET_ADDRSTRLEN];
     char port[PORTSTRLEN];
-    agent_manager_get_addr_by_id(id, ip, port);
-    job_set_granted(job_id, ip, port, 1);
+    agent_table_get_addr_by_id(id, ip, port);
+    job_table_set_granted(job_id, ip, port, 1);
 
-    if (job_check_granted(job_id)) {
+    if (job_table_check_granted(job_id)) {
         printf("[handle_agent] mandando ");
 
         char reply[TAM_BUF];
@@ -380,7 +380,7 @@ static void release(FdEntry *info, char *job_id_str, char *res, char *amount_str
 
     printf("[handle_agent] procesando 'RELEASE %d %s %d'\n", job_id, res, amount);
     local_resources_release(job_id, info->fd, res, amount);
-    reservation_manager_release(job_id);
+    reservation_table_release(job_id);
 }
 
 /* Procesa "DENIED <job_id>" recibido de otro agente. */
@@ -402,7 +402,7 @@ static void denied(char *job_id_str) {
         fd_table_dec_and_release(scheduler_entry);
     }
 
-    job_release(job_id);
+    job_table_release(job_id);
 }
 
 /* Maneja la recepcion de un mensaje de un agente, acumula
@@ -525,7 +525,7 @@ static void job_request(uint64_t id, FdEntry *info, char *job_id, char *reqs_str
         char *res = strtok_r(NULL, colon, &saveptr2);
         char *amount = strtok_r(NULL, colon, &saveptr2);
 
-        if (agent_manager_get(ip, port) == NULL) { 
+        if (agent_table_get(ip, port) == NULL) { 
             // El agente no se encuentra en la tabla de nodos
             printf("No se encuentra el agente %s:%s.\n", ip, port);
 
@@ -542,7 +542,7 @@ static void job_request(uint64_t id, FdEntry *info, char *job_id, char *reqs_str
         }
         else {
             // El agente esta en la tabla de nodos
-            uint64_t agent_id = agent_manager_get_id(ip, port);
+            uint64_t agent_id = agent_table_get_id(ip, port);
 
             // Establecemos conexion si todavia no se hizo
             if (agent_id == UINT64_MAX) {
@@ -562,7 +562,7 @@ static void job_request(uint64_t id, FdEntry *info, char *job_id, char *reqs_str
                     agent_id = UINT64_MAX;
                 }
 
-                agent_manager_set_id(ip, port, agent_id);
+                agent_table_set_id(ip, port, agent_id);
             }
 
             // Mandamos "RESERVE <job_id> <res> <amount>"
@@ -587,23 +587,23 @@ static void job_request(uint64_t id, FdEntry *info, char *job_id, char *reqs_str
         }
     }
     if (nreqs != 0) {
-        job_add(atoi(job_id), nreqs, reqs);
+        job_table_add(atoi(job_id), nreqs, reqs);
     }
 }
 
 /* Manda "RELEASE ..." a cada agente de 'job' y saca el 'job' de table_job. */
-void job_release_(const job_table_t *job) {
+void job_table_release_(const job_table_t *job) {
     if (job == NULL)
         return;
 
-    printf("[handlers] Procesando JOB_RELEASE %d.\n", job->job_id);
+    printf("[handlers] Procesando job_table_release %d.\n", job->job_id);
 
     char request[TAM_BUF];
     for (int i = 0; i < job->nreqs; i++) {
         job_req_t req = job->reqs[i];
         int len = sprintf(request, "RELEASE %d %s %d\n", job->job_id, req.res, req.amount);
 
-        uint64_t agent_id = agent_manager_get_id(req.dest_ip, req.dest_port);
+        uint64_t agent_id = agent_table_get_id(req.dest_ip, req.dest_port);
         FdEntry *agent_info = fd_table_get_and_inc(agent_id);
         if (agent_info != NULL) {
             if (send_msg(agent_id, agent_info, request, len) == -1)
@@ -612,7 +612,7 @@ void job_release_(const job_table_t *job) {
         }
     }
 
-    job_release(job->job_id);
+    job_table_release(job->job_id);
 }
 
 /* Procesa "GET_NODES" (manda al scheduler la lista de agentes
@@ -624,7 +624,7 @@ static void get_nodes(uint64_t id, FdEntry *info) {
     unsigned short len, nlen;
 
     // Armamos el mensaje
-    char *buf = agent_manager_get_nodes();
+    char *buf = agent_table_get_nodes();
     len = sprintf(reply + NBYTES_PACKET_ERL, "%s", buf);
     nlen = htons(len);
     memcpy(reply, (char*)&nlen, NBYTES_PACKET_ERL);
@@ -690,9 +690,9 @@ int handle_scheduler(uint64_t id, FdEntry *info) {
                 char *reqs_str = strtok_r(NULL, "", &saveptr1); // resto de la linea
                 job_request(id, info, job_id, reqs_str);
             }
-            else if (command_name != NULL && strncmp(command_name, "JOB_RELEASE", strlen("JOB_RELEASE")) == 0) {
+            else if (command_name != NULL && strncmp(command_name, "job_table_release", strlen("job_table_release")) == 0) {
                 char *job_id = strtok_r(NULL, space, &saveptr1);
-                job_release_(job_get(atoi(job_id)));
+                job_table_release_(job_table_get(atoi(job_id)));
             }
             else if (command_name != NULL && strncmp(command_name, "GET_NODES", strlen("GET_NODES")) == 0) {
                 get_nodes(id, info);

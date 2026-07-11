@@ -162,7 +162,7 @@ bash test_deadlock.sh
 
 ```
 JOB_REQUEST <job_id> <@host1:recurso:cantidad [@host2:recurso:cantidad ...]>
-JOB_RELEASE <job_id>
+job_table_release <job_id>
 GET_NODES
 ```
 
@@ -199,7 +199,7 @@ Se impone un **orden global de adquisición de recursos**: todos los jobs solici
 
 Cada job tiene un **timeout de 5 segundos**. Si el job no completa en ese tiempo:
 - El scheduler Erlang detecta el posible bloqueo
-- Envía `JOB_RELEASE` para liberar los recursos asignados parcialmente
+- Envía `job_table_release` para liberar los recursos asignados parcialmente
 - Registra `"POSIBLE DEADLOCK"` en `scheduler.log`
 - Reencola el job para reintentar más tarde
 
@@ -224,7 +224,7 @@ Cada job tiene un **timeout de 5 segundos**. Si el job no completa en ese tiempo
 2. Si ocurriera bloqueo por timing extremo:
    - Timer de 5s en Job1 expira
    - Scheduler detecta timeout
-   - `JOB_RELEASE` libera los 2 CPUs en A
+   - `job_table_release` libera los 2 CPUs en A
    - Log registra `"POSIBLE DEADLOCK"`
 3. Job2 ahora obtiene las CPUs de A
 4. **RESULTADO:** Sistema recupera normalidad 
@@ -276,7 +276,7 @@ Recurso no disponible: Job rechazado → Notificación al scheduler
 ### Caso 3 — Deadlock y resolución
 ![Caso 3](diagramas/caso3_deadlock.drawio.png)
 
-Bloqueo circular → Timeout de 5s → `JOB_RELEASE` → Recuperación
+Bloqueo circular → Timeout de 5s → `job_table_release` → Recuperación
 
 ---
 
@@ -306,7 +306,7 @@ Escribe en `stdout`. Para guardar:
 Escribe en `scheduler.log`:
 - `JOB_GRANTED <job_id>`
 - `JOB_DENIED <job_id>`
-- `POSIBLE DEADLOCK` (cuando aplica timeout y JOB_RELEASE)
+- `POSIBLE DEADLOCK` (cuando aplica timeout y job_table_release)
 
 Ver logs:
 

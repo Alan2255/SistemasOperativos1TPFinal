@@ -1,5 +1,5 @@
-#ifndef JOB_MANAGER_H
-#define JOB_MANAGER_H
+#ifndef JOB_table_H
+#define JOB_table_H
 
 #include <stdbool.h>
 #include <arpa/inet.h>
@@ -27,25 +27,31 @@ typedef struct {
 // --- API de tabla de jobs activos ---
 
 // Crea la tabla de jobs
-void job_manager_init(void);
+void job_table_init(void);
 
 // Destruye la tabla de jobs
-void job_manager_shutdown(void);
+void job_table_shutdown(void);
 
 // Agrega un job
-bool job_add(int job_id, int nreqs, const job_req_t *reqs);
+bool job_table_add(int job_id, int nreqs, const job_req_t *reqs);
 
 // Elimina un job
-bool job_release(int job_id);
+bool job_table_release(int job_id);
 
 // Busca un job por ID y lo devuelve si existe
-const job_table_t* job_get(int job_id);
+const job_table_t* job_table_get(int job_id);
 
 // Chequea si todos los requisitos del job están concedidos
-int job_check_granted(int job_id);
+int job_table_check_granted(int job_id);
 
 // Marca el pedido del job correspondiente al ip y puerto como 'val'
-bool job_set_granted(int job_id, char* ip, char* port, int val);
+bool job_table_set_granted(int job_id, char* ip, char* port, int val);
+
+// Bloquea la tabla para que otros procesos no accedan
+void job_table_lock();
+
+// Desbloquea la tabla para que otros procesos puedan acceder
+void job_table_unlock();
 
 // Devuelve un string con la tabla de jobs para imprimir.
 char* job_table_to_string();

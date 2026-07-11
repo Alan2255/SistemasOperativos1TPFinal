@@ -89,6 +89,6 @@ reinicia scheduler_id. */
 void close_scheduler_conn(FdEntry* info);
 
 /* Manda "RELEASE ..." a cada agente de 'job' y saca el 'job' de table_job. */
-void job_release_(const job_table_t *job);
+void job_table_release_(const job_table_t *job);
 
 #endif /* FUNCTIONS_H */
