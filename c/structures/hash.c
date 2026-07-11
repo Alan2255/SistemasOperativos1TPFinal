@@ -40,13 +40,6 @@ Hash* hash_create(void) {
         return NULL;
     }
 
-    if (pthread_mutex_init(&table->mutex, NULL) != 0) {
-        free(table->entries);
-        free(table->indices);
-        free(table);
-        return NULL;
-    }
-
     return table;
 }
 
@@ -87,10 +80,8 @@ static void hash_resize(Hash *table) {
 }
 
 // Agrega o modifica un elemento
-bool hash_set(Hash *table, const char *key, void *value) {
-    if (!table || !key) return false;
-
-    pthread_mutex_lock(&table->mutex);
+void* hash_set(Hash *table, const char *key, void *value) {
+    if (!table || !key) return NULL;
 
     unsigned long h = fun_hash(key);
     size_t idx = h & (table->capacity - 1);
@@ -99,10 +90,10 @@ bool hash_set(Hash *table, const char *key, void *value) {
     while (table->indices[idx] != -1) {
         int entry_idx = table->indices[idx];
         if (table->entries[entry_idx].key != NULL && strcmp(table->entries[entry_idx].key, key) == 0) {
+            void *old_value = table->entries[entry_idx].value;
             // Si ya existe, sobreescribimos el valor
             table->entries[entry_idx].value = value;
-            pthread_mutex_unlock(&table->mutex);
-            return true;
+            return old_value;
         }
         idx = (idx + 1) & (table->capacity - 1);
     }
@@ -127,14 +118,11 @@ bool hash_set(Hash *table, const char *key, void *value) {
     table->indices[idx] = new_entry_idx;
     table->used++;
 
-    pthread_mutex_unlock(&table->mutex);
-    return true;
+    return NULL;
 }
 
 void* hash_get(Hash *table, const char *key) {
     if (!table || !key) return NULL;
-
-    pthread_mutex_lock(&table->mutex);
 
     unsigned long h = fun_hash(key);
     size_t idx = h & (table->capacity - 1);
@@ -143,21 +131,17 @@ void* hash_get(Hash *table, const char *key) {
         int entry_idx = table->indices[idx];
         if (table->entries[entry_idx].key != NULL && strcmp(table->entries[entry_idx].key, key) == 0) {
             void *value = table->entries[entry_idx].value;
-            pthread_mutex_unlock(&table->mutex);
             return value;
         }
         idx = (idx + 1) & (table->capacity - 1);
     }
 
-    pthread_mutex_unlock(&table->mutex);
     return NULL;
 }
 
 // Borra un elemento de la tabla
 bool hash_remove(Hash *table, const char *key) {
     if (!table || !key) return false;
-
-    pthread_mutex_lock(&table->mutex);
 
     unsigned long h = fun_hash(key);
     size_t idx = h & (table->capacity - 1);
@@ -200,14 +184,11 @@ bool hash_remove(Hash *table, const char *key) {
                 }
                 siguiente = (siguiente + 1) & (table->capacity - 1);
             }
-
-            pthread_mutex_unlock(&table->mutex);
             return true;
         }
         idx = (idx + 1) & (table->capacity - 1);
     }
 
-    pthread_mutex_unlock(&table->mutex);
     return false;
 }
 
@@ -222,6 +203,5 @@ void hash_destroy(Hash *table) {
     }
     free(table->entries);
     free(table->indices);
-    pthread_mutex_destroy(&table->mutex);
     free(table);
 }

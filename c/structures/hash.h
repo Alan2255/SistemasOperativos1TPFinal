@@ -21,7 +21,6 @@ typedef struct {
     Entry *entries;
     int capacity;
     int used;
-    pthread_mutex_t mutex;
 } Hash;
 
 // --- API de tabla hash ---
@@ -33,7 +32,7 @@ Hash* hash_create();
 void hash_destroy(Hash *dict);
 
 // Agrega o modifica un elemento
-bool hash_set(Hash *dict, const char *key, void *value);
+void* hash_set(Hash *dict, const char *key, void *value);
 
 // Busca el elemento mediante su key y lo devuelve si existe
 void* hash_get(Hash *dict, const char *key);
