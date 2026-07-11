@@ -40,9 +40,9 @@ c:
 
 erlang:
 # 	@echo "Iniciando agente Erlang"
-	erl -eval "compile:file(main), \
-		compile:file(parser), \
-		compile:file(system_init), \
-		compile:file(tcp_connection), \
-		compile:file(job_manager), \
+	erl -eval "compile:file('erlang/main'), \
+		compile:file('erlang/parser'), \
+		compile:file('erlang/system_init'), \
+		compile:file('erlang/tcp_connection'), \
+		compile:file('erlang/job_manager'), \
 		main:server(random,15,$(ARGS_PROGRAMA))."
