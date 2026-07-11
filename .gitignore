@@ -5,3 +5,4 @@
 agent
 *.txt
 test
+*test.c
