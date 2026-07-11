@@ -105,7 +105,7 @@ const job_table_t* job_table_get(int job_id) {
 
 // Chequea si todos los requisitos del job están concedidos
 int job_table_check_granted(int job_id) {
-    if (!table_job) return NULL;
+    if (!table_job) return -2;
 
     pthread_mutex_lock(&(table_job->mutex));
     
