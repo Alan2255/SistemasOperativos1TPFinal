@@ -41,13 +41,18 @@ bool job_table_release(int job_id);
 // Busca un job por ID y lo devuelve si existe
 const job_table_t* job_table_get(int job_id);
 
+// Saca de la tabla, sin liberar su memoria, el job con 
+// correspondiente al job_id dado.
+job_table_t* job_table_extract(int job_id);
+
+// Saca de la tabla, sin liberar su memoria, todos los jobs. Retorna 
+// un arreglo dinamico con los jobs y terminado en NULL.
+job_table_t** job_table_extract_all();
+
 // Chequea si todos los requisitos del job están concedidos
 int job_table_check_granted(int job_id);
 
 // Marca el pedido del job correspondiente al ip y puerto como 'val'
 bool job_table_set_granted(int job_id, char* ip, char* port, int val);
-
-// Devuelve un string con la tabla de jobs para imprimir.
-char* job_table_to_string();
 
 #endif

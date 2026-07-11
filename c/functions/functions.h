@@ -88,7 +88,10 @@ void close_agent_conn(uint64_t id, FdEntry* info);
 reinicia scheduler_id. */
 void close_scheduler_conn(FdEntry* info);
 
-/* Manda "RELEASE ..." a cada agente de 'job' y saca el 'job' de table_job. */
-void job_table_release_(const job_table_t *job);
+/* Manda "RELEASE ..." a cada agente de 'job'. No toca table_job: el
+llamador es responsable de haber sacado 'job' de la tabla (con
+job_table_extract/job_table_extract_all) y de liberarlo despues de
+llamar a esta funcion. */
+void release_job(const job_table_t *job);
 
 #endif /* FUNCTIONS_H */
