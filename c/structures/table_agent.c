@@ -92,6 +92,20 @@ void agent_manager_set_id(const char *ip, const char *port, uint64_t id) {
     agente->id = id;
 }
 
+// Busca el agente con el identificador dado y reinicia su id (UINT64_MAX)
+void agent_manager_clear_id(uint64_t id) {
+    if (!table_agent || id == UINT64_MAX) return;
+
+    for (int i = 0; i < table_agent->used; i++) {
+        if (table_agent->entries[i].key == NULL) continue;
+        AgentNode *agente = (AgentNode*)table_agent->entries[i].value;
+        if (agente->id == id) {
+            agente->id = UINT64_MAX;
+            return;
+        }
+    }
+}
+
 // Busca un agente por su ip y puerto y actualiza sus recursos
 void agent_manager_update(char* ip, char* port, Resource* resources) {
     if (!table_agent || resources == NULL) return;

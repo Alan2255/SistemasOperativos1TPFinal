@@ -6,7 +6,7 @@
 #include "functions.h"
 #include <stdio.h>
 
-/* Event loop de la instancia epoll (para correr en cada thread). */
+/* Event loop de la instancia epoll para correr en cada thread. */
 void* event_loop(void*) {
     struct epoll_event events[MAX_EVENTS];
     int nfds, n;
@@ -23,7 +23,7 @@ void* event_loop(void*) {
             switch (info->type) {
                 case FD_SCHEDULER:
                     if (events[n].events & (EPOLLHUP | EPOLLERR)) {
-                        fd_table_request_close(info);
+                        close_scheduler_conn(info);
                     }
                     else if (events[n].events & EPOLLOUT)
                         handle_tcp_epollout(id, info);
@@ -37,7 +37,7 @@ void* event_loop(void*) {
 
                 case FD_AGENT:
                     if (events[n].events & (EPOLLHUP | EPOLLERR))
-                        handle_agent_disconnect(info);
+                        close_agent_conn(id, info);
                     else if (events[n].events & EPOLLOUT)
                         handle_tcp_epollout(id, info);
                     else if (events[n].events & EPOLLIN)

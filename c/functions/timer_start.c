@@ -4,8 +4,8 @@
 #include "functions.h"
 
 
-/* Inicia el timer (ya creado) con una cantidad en segundos */
-int timerfd_start(int timerfd, int sec) {
+/* Inicia el timer (ya creado) con una cantidad en segundos. */
+int timer_start(int timerfd, int sec) {
     struct itimerspec ts;
 
     ts.it_value.tv_sec = sec;

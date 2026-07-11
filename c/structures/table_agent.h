@@ -42,6 +42,9 @@ uint64_t agent_manager_get_id(char* ip, char* port);
 // Busca un agente por su ip y puerto y actualiza el identificador de su conexion
 void agent_manager_set_id(const char *ip, const char *port, uint64_t id);
 
+// Busca el agente con el identificador dado y reinicia su id (UINT64_MAX)
+void agent_manager_clear_id(uint64_t id);
+
 // Busca un agente por su ip y puerto y actualiza sus recursos
 void agent_manager_update(char* ip, char* port, Resource* resources);
 

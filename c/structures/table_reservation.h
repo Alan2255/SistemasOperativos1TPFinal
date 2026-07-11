@@ -10,7 +10,7 @@ extern Hash *table_reservation;
 // Job reservado
 typedef struct {
     int job_id;
-    int src_fd;      // Socket de conexión del nodo que hizo la reserva 
+    int src_fd;      // Socket de conexion del agente que hizo la reserva
     char res[MAX_BYTES_NAME_RESOURCE]; 
     int amount; 
     int granted;     // 0 -> encolado, 1 -> concedido

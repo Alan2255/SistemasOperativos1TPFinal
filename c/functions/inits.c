@@ -49,7 +49,7 @@ int init_sock(int type, int ip, int port, fdtype typedata) {
     return sock;
 }
 
-/* Inicia el socket udp para la recepcion de anuncios */
+/* Inicia el socket udp para la recepcion de anuncios. */
 int init_udp_sock() {
     int sock = init_sock(SOCK_DGRAM, INADDR_ANY, PUERTO_UDP, FD_UDP);
 
@@ -61,22 +61,22 @@ int init_udp_sock() {
     return sock;
 }
 
-/* Inicia el socket de escucha para conexiones con otros agentes */
+/* Inicia el socket de escucha para conexiones con otros agentes. */
 int init_agents_listen_sock() {
     int sock = init_sock(SOCK_STREAM, INADDR_ANY, puerto_tcp+1, FD_AGENTS_LISTEN);
 
-    /* Lo ponemos en modo escucha para nuevas conexiones*/
+    // Lo ponemos en modo escucha para nuevas conexiones
     if (listen(sock, MAX_PENDING_CONNECTIONS) == -1)
         return -1;
 
     return sock;
 }
 
-/* Inicia el socket de escucha para conexion con el scheduler  */
+/* Inicia el socket de escucha para conexion con el scheduler. */
 int init_scheduler_listen_sock() {
     int sock = init_sock(SOCK_STREAM, INADDR_LOOPBACK, puerto_tcp, FD_SCHEDULER_LISTEN);
 
-    /* Lo ponemos en modo escucha para nuevas conexiones*/
+    // Lo ponemos en modo escucha para nuevas conexiones
     if (listen(sock, 1) == -1)
         return -1;
 
@@ -99,7 +99,7 @@ int init_announce_timer(void) {
     if (epoll_add(timer_fd, EPOLLIN | EPOLLET, id) == -1) {
         return -1;
     }
-    if (timerfd_start(timer_fd, ANNOUNCE_SEC) == -1) {
+    if (timer_start(timer_fd, ANNOUNCE_SEC) == -1) {
         return -1;
     }
 

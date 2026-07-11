@@ -3,8 +3,8 @@
 #include "../consts.h"
 #include "functions.h"
 
-/* Registra en la instancia epoll un fd con el identificador y eventos
-pasados. Retorna -1 en caso de error. */
+/* Registra en la instancia epoll un fd con el identificador y eventos pasados. 
+Retorna -1 en caso de error. */
 int epoll_add(int fd, int events, uint64_t id) {
     struct epoll_event ev;
     ev.events = events;

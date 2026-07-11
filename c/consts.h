@@ -9,8 +9,8 @@
 #define N_THREADS 5
 #define MAX_EVENTS 10 // Maximos eventos para la instacia epoll
 #define MAX_EVENTS_QUEUE 50 // Maximos eventos que se pueden encolar para que un thread lo procese.
-#define MAX_PENDING_CONNECTIONS 3 // Maxima cantidad de 'connect' pendientes en el listen sock de nodos
-#define MAX_LEN_COMMAND_AGENT 8// Maxima longitud del nombre de un comando entre nodos (como RELEASE O GRANTED)
+#define MAX_PENDING_CONNECTIONS 3 // Maxima cantidad de 'connect' pendientes en el listen sock de agentes
+#define MAX_LEN_COMMAND_AGENT 8// Maxima longitud del nombre de un comando entre agentes (como RELEASE O GRANTED)
 #define MAX_LEN_REQUEST 512
 
 #define MAX_BYTES_NAME_RESOURCE 10// Maxima cantidad de bytes para el nombre de un recurso
