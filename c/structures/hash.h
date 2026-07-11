@@ -21,6 +21,7 @@ typedef struct {
     Entry *entries;
     int capacity;
     int used;
+    pthread_mutex_t mutex;
 } Hash;
 
 // --- API de tabla hash ---

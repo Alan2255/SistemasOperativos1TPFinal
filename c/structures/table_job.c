@@ -20,6 +20,8 @@ void job_table_init(void) {
 void job_table_shutdown(void) {
     if (!table_job) return;
 
+    pthread_mutex_lock(&(table_job->mutex));
+
     for (int i = 0; i < table_job->used; i++) {
         if (table_job->entries[i].value != NULL) {
             free(table_job->entries[i].value);
@@ -29,16 +31,23 @@ void job_table_shutdown(void) {
 
     hash_destroy(table_job);
     table_job = NULL;
+
+    pthread_mutex_unlock(&(table_job->mutex));
 }
 
 // Agrega un job
 bool job_table_add(int job_id, int nreqs, const job_req_t *reqs) {
     if (!table_job || !reqs || nreqs <= 0) return false;
 
+    pthread_mutex_lock(&(table_job->mutex));
+
     int cantidad_a_copiar = (nreqs > MAX_JOB_RQ) ? MAX_JOB_RQ : nreqs;
 
     job_table_t *nuevo_job = malloc(sizeof(job_table_t));
-    if (!nuevo_job) return false;
+    if (!nuevo_job) {
+        pthread_mutex_unlock(&(table_job->mutex));
+        return false;
+    }
 
     nuevo_job->job_id = job_id;
     nuevo_job->nreqs = cantidad_a_copiar;
@@ -49,15 +58,19 @@ bool job_table_add(int job_id, int nreqs, const job_req_t *reqs) {
 
     if (!hash_set(table_job, key, nuevo_job)) {
         free(nuevo_job);
+        pthread_mutex_unlock(&(table_job->mutex));
         return false;
     }
 
+    pthread_mutex_unlock(&(table_job->mutex));
     return true;
 }
 
 // Elimina un job
 bool job_table_release(int job_id) {
     if (!table_job) return false;
+
+    pthread_mutex_lock(&(table_job->mutex));
 
     char key[32];
     fun_hash(job_id, key, sizeof(key));
@@ -67,31 +80,49 @@ bool job_table_release(int job_id) {
         free(job);
     }
 
-    return hash_remove(table_job, key);
+    bool remove_result = hash_remove(table_job, key);
+
+    pthread_mutex_unlock(&(table_job->mutex));
+
+    return remove_result;
 }
 
 // Busca un job por ID y lo devuelve si existe
 const job_table_t* job_table_get(int job_id) {
     if (!table_job) return NULL;
 
+    pthread_mutex_lock(&(table_job->mutex));
+
     char key[32];
     fun_hash(job_id, key, sizeof(key));
 
-    return (const job_table_t*)hash_get(table_job, key);
+    const job_table_t* job = hash_get(table_job, key);
+
+    pthread_mutex_unlock(&(table_job->mutex));
+
+    return job;
 }
 
 // Chequea si todos los requisitos del job están concedidos
 int job_table_check_granted(int job_id) {
+    if (!table_job) return NULL;
 
-    // 
+    pthread_mutex_lock(&(table_job->mutex));
+    
     job_table_t* job = (job_table_t*)job_table_get(job_id);
-    if (!job) return -1;
+    if (!job) {
+        pthread_mutex_unlock(&(table_job->mutex));
+        return -1;
+    }
 
     for (int i = 0; i < job->nreqs; i++) {
-        if (!job->reqs[i].granted) return 0;
+        if (!job->reqs[i].granted) {
+            pthread_mutex_unlock(&(table_job->mutex));
+            return 0;
+        }
     }
-    // 
 
+    pthread_mutex_unlock(&(table_job->mutex));
     return 1;
 }
 
@@ -99,9 +130,14 @@ int job_table_check_granted(int job_id) {
 char* job_table_to_string() {
     if (!table_job) return NULL;
 
+    pthread_mutex_lock(&(table_job->mutex));
+
     size_t buf_tam =  40 + MAX_JOBS * (40 + MAX_JOB_RQ * 90);
     char *buf = malloc(buf_tam);
-    if (!buf) return NULL;
+    if (!buf) {
+        pthread_mutex_unlock(&(table_job->mutex));
+        return NULL;
+    }
 
 
     int written = 0;
@@ -127,35 +163,31 @@ char* job_table_to_string() {
         written += snprintf(buf + written, buf_tam - written, "}\n");
     }
 
+    pthread_mutex_unlock(&(table_job->mutex));
     return buf;
 }
 
 // Marca el pedido del job correspondiente a 'ip' como 'val'
 bool job_table_set_granted(int job_id, char* ip, char* port, int val) {
+    if (!table_job) return NULL;
+
+    pthread_mutex_lock(&(table_job->mutex));
+    
     job_table_t* job = (job_table_t*)job_table_get(job_id);
-    if (!job || !ip) return false;
+    if (!job || !ip) {
+        pthread_mutex_unlock(&(table_job->mutex));
+        return false;
+    }
 
     for (int i = 0; i < job->nreqs; i++) {
         int same_ip = strncmp(job->reqs[i].dest_ip, ip, INET_ADDRSTRLEN) == 0;
         int same_port = strncmp(job->reqs[i].dest_port, port, PORTSTRLEN) == 0;
         if (same_ip && same_port) {
             job->reqs[i].granted = val;
+            pthread_mutex_unlock(&(table_job->mutex));
             return true;
         }
     }
-    return false;
-}
-
-// Bloquea la tabla para que otros procesos no accedan
-void job_table_lock() {
-    if (!table_job) return;
-    
-    pthread_mutex_lock(&(table_job->mutex));
-}
-
-// Desbloquea la tabla para que otros procesos puedan acceder
-void job_table_unlock() {
-    if (!table_job) return;
-    
     pthread_mutex_unlock(&(table_job->mutex));
+    return false;
 }

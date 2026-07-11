@@ -20,6 +20,8 @@ void reservation_table_init(void) {
 void reservation_table_shutdown(void) {
     if (!table_reservation) return;
 
+    pthread_mutex_lock(&(table_reservation->mutex));
+
     for (int i = 0; i < table_reservation->used; i++) {
         if (table_reservation->entries[i].value != NULL) {
             free(table_reservation->entries[i].value);
@@ -29,14 +31,21 @@ void reservation_table_shutdown(void) {
 
     hash_destroy(table_reservation);
     table_reservation = NULL;
+
+    pthread_mutex_unlock(&(table_reservation->mutex));
 }
 
 // Agrega una reserva
 bool reservation_table_add(int job_id, int src_fd, const char* res_name, int amount, int granted) {
     if (!table_reservation || !res_name) return false;
 
+    pthread_mutex_lock(&(table_reservation->mutex));
+
     reservation_t *nueva_reserva = malloc(sizeof(reservation_t));
-    if (!nueva_reserva) return false;
+    if (!nueva_reserva) {
+        pthread_mutex_unlock(&(table_reservation->mutex));
+        return false;
+    }
 
     nueva_reserva->job_id = job_id;
     nueva_reserva->src_fd = src_fd;
@@ -51,15 +60,19 @@ bool reservation_table_add(int job_id, int src_fd, const char* res_name, int amo
 
     if (!hash_set(table_reservation, key, nueva_reserva)) {
         free(nueva_reserva);
+        pthread_mutex_unlock(&(table_reservation->mutex));
         return false;
     }
-
+    
+    pthread_mutex_unlock(&(table_reservation->mutex));
     return true;
 }
 
 // Elimina una reserva
 bool reservation_table_release(int job_id) {
     if (!table_reservation) return false;
+
+    pthread_mutex_lock(&(table_reservation->mutex));
 
     char key[32];
     fun_hash(job_id, key, sizeof(key));
@@ -69,20 +82,31 @@ bool reservation_table_release(int job_id) {
         free(reserva);
     }
 
-    return hash_remove(table_reservation, key);
+    bool result_remove = hash_remove(table_reservation, key);
+
+    pthread_mutex_unlock(&(table_reservation->mutex));
+    
+    return result_remove;
 }
 
 // Cambia el estado de una reserva
 bool reservation_table_set_granted(int job_id, int granted) {
     if (!table_reservation) return false;
 
+    pthread_mutex_lock(&(table_reservation->mutex));
+
     char key[32];
     fun_hash(job_id, key, sizeof(key));
     
     reservation_t *reserva = (reservation_t*)hash_get(table_reservation, key);
-    if (!reserva) return false;
+    if (!reserva) {
+        pthread_mutex_unlock(&(table_reservation->mutex));
+        return false;
+    }
 
     reserva->granted = granted;
+
+    pthread_mutex_unlock(&(table_reservation->mutex));
     return true;
 }
 
@@ -90,15 +114,23 @@ bool reservation_table_set_granted(int job_id, int granted) {
 reservation_t* reservation_table_get(int job_id) {
     if (!table_reservation) return NULL;
 
+    pthread_mutex_lock(&(table_reservation->mutex));
+
     char key[32];
     fun_hash(job_id, key, sizeof(key));
 
-    return (reservation_t*)hash_get(table_reservation, key);
+    reservation_t* reservation = hash_get(table_reservation, key);
+
+    pthread_mutex_unlock(&(table_reservation->mutex));
+
+    return reservation;
 }
 
 // Elimina todas las reservas asociadas a un socket (src_fd)
 void reservation_table_release_by_socket(int src_fd) {
     if (!table_reservation) return;
+
+    pthread_mutex_lock(&(table_reservation->mutex));
 
     // Recorremos el arreglo interno de la tabla hash
     for (int i = 0; i < table_reservation->used; i++) {
@@ -119,4 +151,6 @@ void reservation_table_release_by_socket(int src_fd) {
             table_reservation->entries[i].value = NULL; 
         }
     }
+
+    pthread_mutex_unlock(&(table_reservation->mutex));
 }

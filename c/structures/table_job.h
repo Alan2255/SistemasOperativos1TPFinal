@@ -47,12 +47,6 @@ int job_table_check_granted(int job_id);
 // Marca el pedido del job correspondiente al ip y puerto como 'val'
 bool job_table_set_granted(int job_id, char* ip, char* port, int val);
 
-// Bloquea la tabla para que otros procesos no accedan
-void job_table_lock();
-
-// Desbloquea la tabla para que otros procesos puedan acceder
-void job_table_unlock();
-
 // Devuelve un string con la tabla de jobs para imprimir.
 char* job_table_to_string();
 

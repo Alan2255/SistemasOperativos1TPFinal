@@ -40,6 +40,13 @@ Hash* hash_create(void) {
         return NULL;
     }
 
+    if (pthread_mutex_init(&table->mutex, NULL) != 0) {
+        free(table->entries);
+        free(table->indices);
+        free(table);
+        return NULL;
+    }
+
     return table;
 }
 
@@ -184,6 +191,7 @@ bool hash_remove(Hash *table, const char *key) {
                 }
                 siguiente = (siguiente + 1) & (table->capacity - 1);
             }
+
             return true;
         }
         idx = (idx + 1) & (table->capacity - 1);
@@ -203,5 +211,4 @@ void hash_destroy(Hash *table) {
     }
     free(table->entries);
     free(table->indices);
-    free(table);
 }
