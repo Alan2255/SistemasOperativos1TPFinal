@@ -146,16 +146,56 @@ bool job_table_set_granted(int job_id, char* ip, char* port, int val) {
     return false;
 }
 
-// Bloquea la tabla para que otros procesos no accedan
-void job_table_lock() {
-    if (!table_job) return;
-    
+// Saca de la tabla, sin liberar su memoria, el job con 
+// correspondiente al job_id dado.
+job_table_t* job_table_extract(int job_id) {
+    if (!table_job) return NULL;
+
     pthread_mutex_lock(&(table_job->mutex));
+
+    job_table_t *job = NULL;
+    for (int i = 0; i < table_job->used; i++) {
+        job_table_t *candidato = (job_table_t*)table_job->entries[i].value;
+        if (candidato != NULL && candidato->job_id == job_id) {
+            job = candidato;
+            free(table_job->entries[i].key);
+            table_job->entries[i].key = NULL;
+            table_job->entries[i].value = NULL;
+            break;
+        }
+    }
+
+    pthread_mutex_unlock(&(table_job->mutex));
+
+    return job;
 }
 
-// Desbloquea la tabla para que otros procesos puedan acceder
-void job_table_unlock() {
-    if (!table_job) return;
-    
+// Saca de la tabla, sin liberar su memoria, todos los jobs. Retorna 
+// un arreglo dinamico con los jobs y terminado en NULL.
+job_table_t** job_table_extract_all() {
+    if (!table_job) return NULL;
+
+    pthread_mutex_lock(&(table_job->mutex));
+
+    if (table_job->used == 0) {
+        pthread_mutex_unlock(&(table_job->mutex));
+        return NULL;
+    }
+
+    job_table_t **jobs = malloc((table_job->used + 1) * sizeof(job_table_t*));
+    if (jobs != NULL) {
+        int n = 0;
+        for (int i = 0; i < table_job->used; i++) {
+            if (table_job->entries[i].value == NULL) continue;
+            jobs[n++] = (job_table_t*)table_job->entries[i].value;
+            free(table_job->entries[i].key);
+            table_job->entries[i].key = NULL;
+            table_job->entries[i].value = NULL;
+        }
+        jobs[n] = NULL;
+    }
+
     pthread_mutex_unlock(&(table_job->mutex));
+
+    return jobs;
 }

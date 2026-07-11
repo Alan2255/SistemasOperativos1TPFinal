@@ -494,8 +494,9 @@ void handle_agent(uint64_t id, FdEntry* info) {
 
 
 /* Procesa "JOB_REQUEST <job_id> <ip:port:res:amount> ..." 
-(si el agente de ip:port esta en la tabla le manda RESERVE, en 
-caso contrario le avisa al scheduler y descarta todo el job. */
+(si el agente de ip:port esta en la tabla le manda "RESERVE 
+<res> <amount>, en caso contrario le avisa al scheduler y 
+descarta todo el job. */
 static void job_request(uint64_t id, FdEntry *info, char *job_id, char *reqs_str) {
     if (!info || !job_id || !reqs_str)
         return;
@@ -591,12 +592,10 @@ static void job_request(uint64_t id, FdEntry *info, char *job_id, char *reqs_str
     }
 }
 
-/* Manda "RELEASE ..." a cada agente de 'job' y saca el 'job' de table_job. */
-void job_table_release_(const job_table_t *job) {
+/* Manda "RELEASE ..." a cada agente de 'job'. */
+void release_job(const job_table_t *job) {
     if (job == NULL)
         return;
-
-    printf("[handlers] Procesando job_table_release %d.\n", job->job_id);
 
     char request[TAM_BUF];
     for (int i = 0; i < job->nreqs; i++) {
@@ -611,12 +610,18 @@ void job_table_release_(const job_table_t *job) {
             fd_table_dec_and_release(agent_info);
         }
     }
+}
 
-    job_table_release(job->job_id);
+/* Procesa "JOB_RELEASE <job_id>". */
+static void job_release(char* job_id) {
+    printf("[handle_scheduler] JOB_RELEASE %s.\n", job_id);
+    job_table_t *job = job_table_extract(atoi(job_id));
+    release_job(job);
+    free(job);
 }
 
 /* Procesa "GET_NODES" (manda al scheduler la lista de agentes
-con sus recursos. */
+con sus recursos). */
 static void get_nodes(uint64_t id, FdEntry *info) {
     printf("[handle_scheduler] GET_NODES.\n");
 
@@ -690,9 +695,9 @@ int handle_scheduler(uint64_t id, FdEntry *info) {
                 char *reqs_str = strtok_r(NULL, "", &saveptr1); // resto de la linea
                 job_request(id, info, job_id, reqs_str);
             }
-            else if (command_name != NULL && strncmp(command_name, "job_table_release", strlen("job_table_release")) == 0) {
+            else if (command_name != NULL && strncmp(command_name, "JOB_RELEASE", strlen("JOB_RELEASE")) == 0) {
                 char *job_id = strtok_r(NULL, space, &saveptr1);
-                job_table_release_(job_table_get(atoi(job_id)));
+                job_release(job_id);
             }
             else if (command_name != NULL && strncmp(command_name, "GET_NODES", strlen("GET_NODES")) == 0) {
                 get_nodes(id, info);
