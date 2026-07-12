@@ -92,6 +92,6 @@ void close_scheduler_conn(FdEntry* info);
 llamador es responsable de haber sacado 'job' de la tabla (con
 job_table_extract/job_table_extract_all) y de liberarlo despues de
 llamar a esta funcion. */
-void release_job(const job_table_t *job);
+void release_job(job_table_t *job);
 
 #endif /* FUNCTIONS_H */

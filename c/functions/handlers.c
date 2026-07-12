@@ -42,8 +42,9 @@ static int parse_announce(char *msg, char *port, Resource *resources, int *res_c
     int count_tokens = tokenize_str(msg, " ", 2 + MAX_RESOURCES_AGENT, tokens);
 
     // Parseamos el comando
-    if (count_tokens <= 2 || strcmp(tokens[0], "ANNOUNCE") != 0)
+    if (count_tokens <= 2 || strcmp(tokens[0], "ANNOUNCE") != 0) {
         return -1;
+    }
 
     snprintf(port, PORTSTRLEN, "%s", tokens[1]);
 
@@ -254,14 +255,14 @@ void handle_announce(FdEntry* info) {
         int res_count;
         if (parse_announce(buf, port, resources, &res_count) == -1)
             return;
-
-        // printf("ip: %s, ", ip);
-        // printf("puerto: %s, agent_table->timerfd=",port);
+        
+        printf("ip: %s, ", ip);
+        printf("puerto: %s, agent_table->timerfd=",port);
 
         /* Agregamos o actualizamos el nodo en la tabla */
         int timerfd = agent_table_get_timerfd(ip, port);
 
-        // printf("%d.\n", timerfd);
+        printf("%d.\n", timerfd);
 
         if (timerfd < 0) { // Si el nodo no se encuentra en la tabla
             // Creamos el timer
@@ -593,7 +594,7 @@ static void job_request(uint64_t id, FdEntry *info, char *job_id, char *reqs_str
 }
 
 /* Manda "RELEASE ..." a cada agente de 'job'. */
-void release_job(const job_table_t *job) {
+void release_job(job_table_t *job) {
     if (job == NULL)
         return;
 

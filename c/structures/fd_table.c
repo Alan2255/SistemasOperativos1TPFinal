@@ -48,7 +48,7 @@ void fd_table_destroy() {
         free(entry);
     }
 
-    hash_destroy(fd_table);
+    hash_destroy(fd_table, free);
     fd_table = NULL;
 }
 
@@ -62,31 +62,29 @@ uint64_t fd_table_add(int fd, fdtype type) {
     char key[16];
     fd_key(fd, key, sizeof(key));
 
-    FdEntry *entry = (FdEntry*)hash_get(fd_table, key);
+    FdEntry *entry = (FdEntry*)hash_get(fd_table, key, sizeof(FdEntry));
     int is_new = entry == NULL;
 
     if (is_new) {
         entry = malloc(sizeof(FdEntry));
-        if (entry == NULL)
+        if (entry == NULL) {
             return UINT64_MAX;
+        }
 
         entry->reuse = 0;
         entry->fd = -1;
         entry->data = NULL;
         pthread_mutex_init(&entry->mutex, NULL);
 
-        if (!hash_set(fd_table, key, entry)) {
-            pthread_mutex_destroy(&entry->mutex);
-            free(entry);
-            return UINT64_MAX;
-        }
+        hash_set(fd_table, key, entry);
     }
 
     void *data;
     if (type == FD_SCHEDULER || type == FD_AGENT) {
         fd_tcp_data *tcp_data = malloc(sizeof(fd_tcp_data));
-        if (tcp_data == NULL)
+        if (tcp_data == NULL) {
             return UINT64_MAX;
+        }
 
         tcp_data->len_buf_in = 0;
         tcp_data->len_buf_out = 0;
@@ -101,8 +99,9 @@ uint64_t fd_table_add(int fd, fdtype type) {
     }
     else if (type == FD_NODE_TIMER) {
         data = malloc(sizeof(fd_node_timer_data));
-        if (data == NULL)
+        if (data == NULL) {
             return UINT64_MAX;
+        }
     }
     else {
         data = NULL;
@@ -128,7 +127,7 @@ void fd_table_undo_add(int fd) {
     char key[16];
     fd_key(fd, key, sizeof(key));
 
-    FdEntry *entry = (FdEntry*)hash_get(fd_table, key);
+    FdEntry *entry = (FdEntry*)hash_get(fd_table, key, sizeof(FdEntry));
     if (entry == NULL)
         return;
 
@@ -153,7 +152,7 @@ FdEntry* fd_table_get_and_inc(uint64_t id) {
     char key[16];
     fd_key(fd, key, sizeof(key));
 
-    FdEntry *entry = (FdEntry*)hash_get(fd_table, key);
+    FdEntry *entry = (FdEntry*)hash_get(fd_table, key, sizeof(FdEntry));
     if (!entry)
         return NULL;
 

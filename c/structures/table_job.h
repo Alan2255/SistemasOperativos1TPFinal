@@ -39,7 +39,7 @@ bool job_table_add(int job_id, int nreqs, const job_req_t *reqs);
 bool job_table_release(int job_id);
 
 // Busca un job por ID y lo devuelve si existe
-const job_table_t* job_table_get(int job_id);
+job_table_t* job_table_get(int job_id);
 
 // Saca de la tabla, sin liberar su memoria, el job con 
 // correspondiente al job_id dado.

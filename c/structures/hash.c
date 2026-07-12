@@ -128,8 +128,8 @@ void* hash_set(Hash *table, const char *key, void *value) {
     return NULL;
 }
 
-void* hash_get(Hash *table, const char *key) {
-    if (!table || !key) return NULL;
+void* hash_get(Hash *table, const char *key, size_t element_size) {
+    if (!table || !key || element_size == 0) return NULL;
 
     unsigned long h = fun_hash(key);
     size_t idx = h & (table->capacity - 1);
@@ -138,7 +138,13 @@ void* hash_get(Hash *table, const char *key) {
         int entry_idx = table->indices[idx];
         if (table->entries[entry_idx].key != NULL && strcmp(table->entries[entry_idx].key, key) == 0) {
             void *value = table->entries[entry_idx].value;
-            return value;
+            if (!value) return NULL;
+
+            void *copy = malloc(element_size);
+            if (!copy) return NULL;
+
+            memcpy(copy, value, element_size);
+            return copy;
         }
         idx = (idx + 1) & (table->capacity - 1);
     }
@@ -147,7 +153,7 @@ void* hash_get(Hash *table, const char *key) {
 }
 
 // Borra un elemento de la tabla
-bool hash_remove(Hash *table, const char *key) {
+bool hash_remove(Hash *table, const char *key, void (*free_value)(void*)) {
     if (!table || !key) return false;
 
     unsigned long h = fun_hash(key);
@@ -161,6 +167,9 @@ bool hash_remove(Hash *table, const char *key) {
             // Liberamos la clave que duplicó el hash_set
             free(table->entries[entry_idx].key);
             table->entries[entry_idx].key = NULL;
+            if (free_value && table->entries[entry_idx].value) {
+                free_value(table->entries[entry_idx].value);
+            }
             table->entries[entry_idx].value = NULL;
 
             // Quitamos el índice actual
@@ -201,12 +210,15 @@ bool hash_remove(Hash *table, const char *key) {
 }
 
 // Destruir la tabla
-void hash_destroy(Hash *table) {
+void hash_destroy(Hash *table, void (*free_value)(void*)) {
     if (!table) return;
 
     for (int i = 0; i < table->used; i++) {
         if (table->entries[i].key != NULL) {
             free(table->entries[i].key);
+            if (free_value && table->entries[i].value) {
+                free_value(table->entries[i].value);
+            }
         }
     }
     free(table->entries);

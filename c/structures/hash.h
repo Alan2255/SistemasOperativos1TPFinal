@@ -30,15 +30,15 @@ typedef struct {
 Hash* hash_create();
 
 // Destruye la tabla
-void hash_destroy(Hash *dict);
+void hash_destroy(Hash *dict, void (*free_value)(void*));
 
 // Agrega o modifica un elemento
 void* hash_set(Hash *dict, const char *key, void *value);
 
 // Busca el elemento mediante su key y lo devuelve si existe
-void* hash_get(Hash *dict, const char *key);
+void* hash_get(Hash *table, const char *key, size_t element_size);
 
 // Borra un elemento de la tabla
-bool hash_remove(Hash *table, const char *key);
+bool hash_remove(Hash *table, const char *key, void (*free_value)(void*));
 
 #endif
