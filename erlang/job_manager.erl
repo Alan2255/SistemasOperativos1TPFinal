@@ -40,8 +40,8 @@ procesar_respuesta(JobID, Job, _CantRecursos, Socket, Msg_RELEASE, JobTimeout) -
 % Retorna: Lista de tuplas de la forma [{Nodo1, CantidadTomada}, {Nodo2, CantidadTomada2}, etc] si pudo repartir el recurso        
 %manda el msg al agente espera su respuesta y la maneja
 handler_job(JobID, Job, CantRecursos, JobTimeout, Socket, Msg_REQUEST, Msg_RELEASE) ->
+    ets:insert(pendientes, {JobID, Job, self()}), %Para evitar race cond insertamos primero y luego mandamos el msg
     gen_tcp:send(Socket, list_to_binary(Msg_REQUEST)),
-    ets:insert(pendientes, {JobID, Job, self()}),
     procesar_respuesta(JobID, Job, CantRecursos, Socket, Msg_RELEASE, JobTimeout).
 
 % Cada vez q recibe un job arma la peticion y crea un proceso (conectado al mismo agente) para q mande y espere la rta del job
