@@ -264,7 +264,10 @@ void handle_announce(FdEntry* info) {
 
         printf("%d.\n", timerfd);
 
-        if (timerfd < 0) { // Si el nodo no se encuentra en la tabla
+        if (timerfd == -1) {
+            perror("agent_table_get_timerfd");
+        }
+        else if (timerfd == 0) { // Si el nodo no se encuentra en la tabla
             // Creamos el timer
             timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
 
@@ -300,7 +303,7 @@ void handle_announce(FdEntry* info) {
             fd_table_dec_and_release(timer_entry);
         }
         else {
-            agent_table_update(ip, port, resources);
+            agent_table_update(ip, port, resources, res_count);
         }
 
         /* Iniciamos/reiniciamos el timer */
@@ -527,7 +530,8 @@ static void job_request(uint64_t id, FdEntry *info, char *job_id, char *reqs_str
         char *res = strtok_r(NULL, colon, &saveptr2);
         char *amount = strtok_r(NULL, colon, &saveptr2);
 
-        if (agent_table_get(ip, port) == NULL) { 
+        uint64_t agent_id;
+        if (agent_table_get_id(ip, port, &agent_id) <= 0) { 
             // El agente no se encuentra en la tabla de nodos
             printf("No se encuentra el agente %s:%s.\n", ip, port);
 
@@ -544,8 +548,7 @@ static void job_request(uint64_t id, FdEntry *info, char *job_id, char *reqs_str
         }
         else {
             // El agente esta en la tabla de nodos
-            uint64_t agent_id = agent_table_get_id(ip, port);
-
+            
             // Establecemos conexion si todavia no se hizo
             if (agent_id == UINT64_MAX) {
                 int agent_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
@@ -602,8 +605,10 @@ void release_job(job_table_t *job) {
     for (int i = 0; i < job->nreqs; i++) {
         job_req_t req = job->reqs[i];
         int len = sprintf(request, "RELEASE %d %s %d\n", job->job_id, req.res, req.amount);
-
-        uint64_t agent_id = agent_table_get_id(req.dest_ip, req.dest_port);
+        uint64_t agent_id;
+        if (agent_table_get_id(req.dest_ip, req.dest_port, &agent_id) == 0) {
+            continue;
+        }
         FdEntry *agent_info = fd_table_get_and_inc(agent_id);
         if (agent_info != NULL) {
             if (send_msg(agent_id, agent_info, request, len) == -1)

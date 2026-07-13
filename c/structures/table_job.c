@@ -4,8 +4,7 @@
 #include <arpa/inet.h>
 #include "table_job.h"
 
-// Función hash
-static void fun_hash(int job_id, char *out_key, size_t max_len) {
+static void make_key(int job_id, char *out_key, size_t max_len) {
     snprintf(out_key, max_len, "%d", job_id);
 }
 
@@ -59,7 +58,7 @@ bool job_table_add(int job_id, int nreqs, const job_req_t *reqs) {
     job_table_t* new_job = make_job(job_id, nreqs, reqs);
 
     char key[32];
-    fun_hash(job_id, key, sizeof(key));
+    make_key(job_id, key, sizeof(key));
 
     job_table_t* old_node = hash_set(table_job, key, new_job);
 
@@ -80,7 +79,7 @@ bool job_table_release(int job_id) {
     pthread_mutex_lock(&(table_job->mutex));
 
     char key[32];
-    fun_hash(job_id, key, sizeof(key));
+    make_key(job_id, key, sizeof(key));
     bool remove_result = hash_remove(table_job, key, free);
 
     pthread_mutex_unlock(&(table_job->mutex));
@@ -95,7 +94,7 @@ job_table_t* job_table_get(int job_id) {
     pthread_mutex_lock(&(table_job->mutex));
 
     char key[32];
-    fun_hash(job_id, key, sizeof(key));
+    make_key(job_id, key, sizeof(key));
 
     job_table_t* job = hash_get(table_job, key, sizeof(job_table_t));
 
@@ -111,7 +110,7 @@ int job_table_check_granted(int job_id) {
     pthread_mutex_lock(&(table_job->mutex));
     
     char key[32];
-    fun_hash(job_id, key, sizeof(key));
+    make_key(job_id, key, sizeof(key));
 
     job_table_t* job = hash_get(table_job, key, sizeof(job_table_t));
 
@@ -181,7 +180,7 @@ bool job_table_set_granted(int job_id, char* ip, char* port, int val) {
     pthread_mutex_lock(&(table_job->mutex));
     
     char key[32];
-    fun_hash(job_id, key, sizeof(key));
+    make_key(job_id, key, sizeof(key));
 
     job_table_t* job = hash_get(table_job, key, sizeof(job_table_t));
 

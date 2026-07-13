@@ -35,9 +35,9 @@ void agent_table_add(char* ip, char* port, int count_resources, Resource* resour
 // Busca un agente por su ip y puerto y devuelve un puntero al mismo si existe
 AgentNode* agent_table_get(char* ip, char* port);
 
-// Busca un agente por su ip y puerto y devuelve el identificador de su
-// conexion, o UINT64_MAX si no tiene una conexion activa
-uint64_t agent_table_get_id(char* ip, char* port);
+// Busca un agente por su ip y puerto y guarda su identificador en el parametro 'id'.
+// Devuelve 1 en caso de exito, 0 si el agente no se encuentra, o -1 en caso de error.
+int agent_table_get_id(char* ip, char* port, uint64_t* id);
 
 // Busca un agente por su ip y puerto y actualiza el identificador de su conexion
 void agent_table_set_id(const char *ip, const char *port, uint64_t id);
@@ -46,9 +46,10 @@ void agent_table_set_id(const char *ip, const char *port, uint64_t id);
 void agent_table_clear_id(uint64_t id);
 
 // Busca un agente por su ip y puerto y actualiza sus recursos
-void agent_table_update(char* ip, char* port, Resource* resources);
+void agent_table_update(char* ip, char* port, Resource* resources, int count_resources);
 
-// Busca un agente por su ip y puerto y devuelve su timerfd si existe
+// Busca un agente por su ip y puerto y obtiene su timerfd. 
+// Devuelve el timerfd si el agente se encuentra, 0 en caso contrario, o -1 en caso de error.
 int agent_table_get_timerfd(const char *ip, const char *port);
 
 // Busca un agente por su ip y puerto y actualiza su timerfd
