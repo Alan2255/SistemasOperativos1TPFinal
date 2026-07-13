@@ -99,7 +99,11 @@ int local_resources_reserve(int job_id, int socket, char* resource_name, int amo
     pthread_mutex_lock(&resource->mutex);
 
     // Reserva los recursos
-    if (resource->available >= amount) {
+    if (resource->total_capacity < amount) { 
+        pthread_mutex_unlock(&resource->mutex);
+        return -1;
+    }
+    else if (resource->available >= amount) {
         resource->available -= amount;
         pthread_mutex_unlock(&resource->mutex);
         return 0;

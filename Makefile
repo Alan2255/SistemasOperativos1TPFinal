@@ -2,9 +2,10 @@ RES_AMOUNT = 3
 RES_1 = cpu
 RES_2 = mem
 RES_3 = gpu
-VAL_1 = 32
-VAL_2 = 256
-VAL_3 = 48
+VAL_1 = 256
+VAL_2 = 1000
+VAL_3 = 512
+JOBS = 1000
 
 # Ejecuta siempre
 .PHONY: compile_c run_c c erlang
@@ -40,9 +41,10 @@ c:
 
 erlang:
 # 	@echo "Iniciando agente Erlang"
-	erl -eval "compile:file('erlang/main'), \
-		compile:file('erlang/parser'), \
-		compile:file('erlang/system_init'), \
-		compile:file('erlang/tcp_connection'), \
-		compile:file('erlang/job_manager'), \
-		main:server(random,15,$(ARGS_PROGRAMA))."
+	cd erlang
+	erl -eval "compile:file(main), \
+		compile:file('parser'), \
+		compile:file('system_init'), \
+		compile:file('tcp_connection'), \
+		compile:file('job_manager'), \
+		main:server(random,$(JOBS),$(ARGS_PROGRAMA))."

@@ -86,6 +86,30 @@ static void hash_resize(Hash *table) {
     }
 }
 
+
+// Agrega o modifica un elemento
+void hash_replace(Hash *table, const char *key, void *value) {
+    if (!table || !key) return;
+
+    unsigned long h = fun_hash(key);
+    size_t idx = h & (table->capacity - 1);
+
+    // Buscar el elemento en la tabla
+    while (table->indices[idx] != -1) {
+        int entry_idx = table->indices[idx];
+        if (table->entries[entry_idx].key != NULL && strcmp(table->entries[entry_idx].key, key) == 0) {
+            void *old_value = table->entries[entry_idx].value;
+            // Si ya existe, sobreescribimos el valor
+            table->entries[entry_idx].value = value;
+            // Liberamos el valor pisado
+            free(old_value);
+            return;
+        }
+        idx = (idx + 1) & (table->capacity - 1);
+    }
+}
+
+// Copia una referencia del valor
 // Agrega o modifica un elemento
 void* hash_set(Hash *table, const char *key, void *value) {
     if (!table || !key) return NULL;

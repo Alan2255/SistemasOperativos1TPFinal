@@ -106,11 +106,11 @@ job_table_t* job_table_get(int job_id) {
 // Chequea si todos los requisitos del job están concedidos
 int job_table_check_granted(int job_id) {
     if (!table_job) return -2;
-
-    pthread_mutex_lock(&(table_job->mutex));
     
     char key[32];
     make_key(job_id, key, sizeof(key));
+
+    pthread_mutex_lock(&(table_job->mutex));
 
     job_table_t* job = hash_get(table_job, key, sizeof(job_table_t));
 
@@ -120,7 +120,7 @@ int job_table_check_granted(int job_id) {
     }
 
     for (int i = 0; i < job->nreqs; i++) {
-        if (!job->reqs[i].granted) {
+        if (!(job->reqs[i].granted)) {
             free(job);
             pthread_mutex_unlock(&(table_job->mutex));
             return 0;
@@ -177,11 +177,11 @@ char* job_table_to_string() {
 bool job_table_set_granted(int job_id, char* ip, char* port, int val) {
     if (!table_job) return NULL;
 
-    pthread_mutex_lock(&(table_job->mutex));
-    
     char key[32];
     make_key(job_id, key, sizeof(key));
-
+    
+    pthread_mutex_lock(&(table_job->mutex));
+    
     job_table_t* job = hash_get(table_job, key, sizeof(job_table_t));
 
     if (!job || !ip) {
@@ -194,7 +194,10 @@ bool job_table_set_granted(int job_id, char* ip, char* port, int val) {
         int same_port = strncmp(job->reqs[i].dest_port, port, PORTSTRLEN) == 0;
         if (same_ip && same_port) {
             job->reqs[i].granted = val;
-            free(job);
+            
+            job_table_t* old_job = hash_set(table_job, key, job);
+            free(old_job);
+            
             pthread_mutex_unlock(&(table_job->mutex));
             return true;
         }

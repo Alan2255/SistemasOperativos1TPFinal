@@ -32,7 +32,8 @@ Hash* hash_create();
 // Destruye la tabla
 void hash_destroy(Hash *dict, void (*free_value)(void*));
 
-
+// Modifica un elemento si existe sino no hace nada
+void hash_replace(Hash *table, const char *key, void *value);
 
 // Agrega o modifica un elemento
 void* hash_set(Hash *dict, const char *key, void *value);

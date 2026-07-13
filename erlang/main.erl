@@ -10,60 +10,10 @@ generate_jobs(0) -> % cuando N es 0, termina
 % Envia por mensaje JobID(int), Job(string), CantRecursos(int) al proceso scheduler_job
 % Recibe: N(int), ListMaximos(lista de 3 enteros)
 generate_jobs(N) -> 
-    % [MaxCPU, MaxMEM, MaxGPU] = ListMaximos,
     JobID_int = erlang:unique_integer([positive]), %genera un entero unico en toda la instancia actual del sistema(maq virtual BEAM)
     JobID = integer_to_list(JobID_int),
     ListRecursos = ["cpu", "mem", "gpu"],
-
-    % Eleccion_recursos = rand:uniform(3), %random entre 1 y N (inclusive), elije cuantos recursos va a pedir
-    Eleccion_recursos = 1,
-
-    case Eleccion_recursos of
-        1 ->
-            Indice_recurso = rand:uniform(3),
-            Recurso = lists:nth(Indice_recurso, ListRecursos),
-            Cantidad = integer_to_list(rand:uniform(4)),
-            % Cantidad = integer_to_list(rand:uniform((lists:nth(Indice_recurso, ListMaximos)))),%Cant random del recurso elegido de 1 hasta lo max q pueda pedir
-
-            Job = Recurso ++ ":" ++ Cantidad, %esto crea el Job EJ : "recursorandom:numrandom"
-            pid_scheduler_job ! {JobID, Job, 1},
-            io:format("[job_generator] ~p ~p ~p ~n",[JobID, Job, 1])
-
-        % 2 ->    
-        %     Indice_ignorar = rand:uniform(3),
-        %     Recurso_ignorar = lists:nth(Indice_ignorar, ListRecursos),
-
-        %     Recursos_elegidos = [R || R <- ListRecursos, R =/= Recurso_ignorar], %devuelve una lista sin el recurso ignorado
-        %     Cant_elegidas = parser:eliminar_indice(Indice_ignorar, ListMaximos), %lo hacemos asi pq de otra maner apodrias tener misma cant y no saber cual eliminar
-
-        %     [Recurso1, Recurso2] = Recursos_elegidos,
-        %     [Cant1, Cant2] = Cant_elegidas,
-        %     Cantidad1 = integer_to_list(rand:uniform(Cant1)),
-        %     Cantidad2 = integer_to_list(rand:uniform(Cant2)),
-            
-        %     Job = Recurso1 ++ ":" ++ Cantidad1 ++ ":" ++ Recurso2 ++ ":" ++ Cantidad2,
-        %     pid_scheduler_job ! {JobID, Job, 2};
-
-        % 3 ->
-        %     Recurso1 = "cpu",
-        %     Cantidad1 = integer_to_list(rand:uniform(MaxCPU)),%Cant random del recurso elegido de 1 hasta lo max q pueda pedir
-
-        %     Recurso2 = "mem",
-        %     Cantidad2 = integer_to_list(rand:uniform(MaxMEM)),
-
-        %     Recurso3 = "gpu",
-        %     Cantidad3 = integer_to_list(rand:uniform(MaxGPU)),
-
-        %     Job = Recurso1 ++ ":" ++ Cantidad1 ++ ":" ++ Recurso2 ++ ":" ++ Cantidad2 ++ ":" ++  Recurso3 ++ ":" ++ Cantidad3,
-        %     pid_scheduler_job ! {JobID, Job, 3}
-        end,
-    generate_jobs(N-1).%Ya generamos un job restamos el N de cantidad a generar y llamamos de nuevo a la funcion.
-
-generate_jobs2(N) -> 
-    JobID_int = erlang:unique_integer([positive]), %genera un entero unico en toda la instancia actual del sistema(maq virtual BEAM)
-    JobID = integer_to_list(JobID_int),
-    ListRecursos = ["cpu", "mem", "gpu"],
-    CantRandom = 100,
+    CantRandom = 10,
     Eleccion_recursos = rand:uniform(3), %random entre 1 y N (inclusive), elije cuantos recursos va a pedir
     
     case Eleccion_recursos of
@@ -103,7 +53,7 @@ generate_jobs2(N) ->
              Job = Recurso1 ++ ":" ++ Cantidad1 ++ ":" ++ Recurso2 ++ ":" ++ Cantidad2 ++ ":" ++  Recurso3 ++ ":" ++ Cantidad3,
              pid_scheduler_job ! {JobID, Job, 3}
         end,
-    generate_jobs2(N-1).%Ya generamos un job restamos el N de cantidad a generar y llamamos de nuevo a la funcion.
+    generate_jobs(N-1).%Ya generamos un job restamos el N de cantidad a generar y llamamos de nuevo a la funcion.
 
 % Recibe por mensaje JobID(int), Job(string), CantRecursos(int) y crea SIN LINK un proceso que maneje este job, se vuelve a llamar recursivamente para seguir atendiendo jobs
 % handler_job es creado sin link ya que si muere o le pasa algo a ese job no nos importa queremos seguir atendiendo los proximos.

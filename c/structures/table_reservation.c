@@ -30,7 +30,6 @@ void reservation_table_shutdown(void) {
     }
 
     hash_destroy(table_reservation, free);
-    table_reservation = NULL;
 
     pthread_mutex_unlock(&(table_reservation->mutex));
 }
@@ -55,12 +54,12 @@ reservation_t* make_reservation(int job_id, int src_fd, const char* res_name, in
 bool reservation_table_add(int job_id, int src_fd, const char* res_name, int amount, int granted) {
     if (!table_reservation || !res_name) return false;
 
-    pthread_mutex_lock(&(table_reservation->mutex));
+    char key[32];
+    fun_hash(job_id, key, sizeof(key));
 
     reservation_t* new_reservation = make_reservation(job_id, src_fd, res_name, amount, granted);
 
-    char key[32];
-    fun_hash(job_id, key, sizeof(key));
+    pthread_mutex_lock(&(table_reservation->mutex));
 
     reservation_t* old_node = hash_set(table_reservation, key, new_reservation);
     if (old_node != NULL) {
@@ -77,12 +76,13 @@ bool reservation_table_add(int job_id, int src_fd, const char* res_name, int amo
 bool reservation_table_release(int job_id) {
     if (!table_reservation) return false;
 
-    pthread_mutex_lock(&(table_reservation->mutex));
-
     char key[32];
     fun_hash(job_id, key, sizeof(key));
 
+    pthread_mutex_lock(&(table_reservation->mutex));
+
     reservation_t *reserva = (reservation_t*)hash_get(table_reservation, key, sizeof(reservation_t));
+
     if (reserva != NULL) {
         free(reserva);
     }
@@ -98,18 +98,21 @@ bool reservation_table_release(int job_id) {
 bool reservation_table_set_granted(int job_id, int granted) {
     if (!table_reservation) return false;
 
-    pthread_mutex_lock(&(table_reservation->mutex));
-
     char key[32];
     fun_hash(job_id, key, sizeof(key));
     
+    pthread_mutex_lock(&(table_reservation->mutex));
+
     reservation_t *reserva = (reservation_t*)hash_get(table_reservation, key, sizeof(reservation_t));
+
     if (!reserva) {
         pthread_mutex_unlock(&(table_reservation->mutex));
         return false;
     }
 
     reserva->granted = granted;
+    reservation_t* old_reservation = hash_set(table_reservation, key, reserva);
+    free(old_reservation);
 
     pthread_mutex_unlock(&(table_reservation->mutex));
     return true;
@@ -118,11 +121,11 @@ bool reservation_table_set_granted(int job_id, int granted) {
 // Busca una reserva por ID 
 reservation_t* reservation_table_get(int job_id) {
     if (!table_reservation) return NULL;
-
-    pthread_mutex_lock(&(table_reservation->mutex));
-
+    
     char key[32];
     fun_hash(job_id, key, sizeof(key));
+
+    pthread_mutex_lock(&(table_reservation->mutex));
 
     reservation_t* reservation = hash_get(table_reservation, key, sizeof(reservation_t));
 
