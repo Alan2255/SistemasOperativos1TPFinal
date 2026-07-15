@@ -16,6 +16,8 @@
 #include "../consts.h"
 #include "functions.h"
 #include <stdbool.h>
+#include <stdint.h>
+#include <inttypes.h>
 
 /* Separa el string en tokens y guarda una referencia a cada uno en 'tokens'. */
 static int tokenize_str(char *str, char *delim, int max_tokens, char **tokens) {
@@ -84,7 +86,7 @@ static int send_msg(uint64_t id, FdEntry* info, char* msg, int len) {
 
     pthread_mutex_lock(&data->mutex_out);
 
-    // Si ya hay cosas encoladas, mantenemos el orden FIFO metiendo lo nuevo atrás
+    // Si ya hay cosas encoladas, mantenemos el orden FIFO metiendo lo nuevo atras
     if (data->len_buf_out > 0) {
         add_to_buffer(info, msg, len);
     }
@@ -93,7 +95,7 @@ static int send_msg(uint64_t id, FdEntry* info, char* msg, int len) {
 
         if (n == -1) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                // El socket está temporalmente lleno. Encolamos TODO el mensaje
+                // El socket esta temporalmente lleno, encolamos TODO el mensaje
                 add_to_buffer(info, msg, len);
                 epoll_mod(info->fd, EPOLLOUT | EPOLLIN | EPOLLET, id);
             }
@@ -104,7 +106,7 @@ static int send_msg(uint64_t id, FdEntry* info, char* msg, int len) {
             }
         }
         else if (n < len) {
-            // Envío parcial: encolamos lo que faltó mandar
+            // Envio parcial, encolamos lo que falta
             add_to_buffer(info, msg + n, len - n);
             epoll_mod(info->fd, EPOLLOUT | EPOLLIN | EPOLLET, id);
         }
@@ -192,8 +194,10 @@ void handle_listen_scheduler(FdEntry* info) {
         close(scheduler_fd);
         return;
     }
-
     scheduler_id = new_id;
+
+    printf("[handle_listen_scheduler] se conecto el scheduler con el id %" PRIx64 "\n", scheduler_id);
+
 }
 
 
@@ -220,6 +224,9 @@ void handle_agent_connect(FdEntry* info) {
             close(agent_fd);
             return;
         }
+
+        printf("[handle_agent_connect] aceptamos un agente con el id %" PRIx64 "\n", agent_id);
+        
     }
 }
 
@@ -256,13 +263,13 @@ void handle_announce(FdEntry* info) {
         if (parse_announce(buf, port, resources, &res_count) == -1)
             return;
         
-        printf("ip: %s, ", ip);
-        printf("puerto: %s, agent_table->timerfd=",port);
+        // printf("ip: %s, ", ip);
+        // printf("puerto: %s, agent_table->timerfd=",port);
 
         /* Agregamos o actualizamos el nodo en la tabla */
         int timerfd = agent_table_get_timerfd(ip, port);
 
-        printf("%d.\n", timerfd);
+        // printf("%d.\n", timerfd);
 
         if (timerfd == -1) {
             perror("agent_table_get_timerfd");
@@ -311,6 +318,29 @@ void handle_announce(FdEntry* info) {
     }
 }
 
+static int send_job_denied(char* job_id_str, int has_reference, FdEntry *scheduler_entry) {
+    char reply[TAM_BUF];
+    unsigned short len = sprintf(reply + NBYTES_PACKET_ERL, "JOB_DENIED %s", job_id_str);
+    unsigned short nlen = htons(len);
+    memcpy(reply, (char*)&nlen, NBYTES_PACKET_ERL);
+
+    if (!has_reference) {
+        scheduler_entry = fd_table_get_and_inc(scheduler_id);
+        if (!scheduler_entry) {
+            return -1;
+        }
+    }
+
+    if (send_msg(scheduler_id, scheduler_entry, reply, NBYTES_PACKET_ERL + len) == -1) {
+        close_scheduler_conn(scheduler_entry);
+    }
+
+    if (!has_reference) {
+        fd_table_dec_and_release(scheduler_entry);
+    }
+
+    return 0;
+}
 
 /* Procesa "RESERVE <job_id> <res> <amount>" recibido de otro agente. */
 static void reserve(uint64_t id, FdEntry *info, char *job_id_str, char *res, char *amount_str) {
@@ -320,7 +350,7 @@ static void reserve(uint64_t id, FdEntry *info, char *job_id_str, char *res, cha
     int job_id = atoi(job_id_str);
     int amount = atoi(amount_str);
 
-    printf("[handle_agent] procesando 'RESERVE %d'\n", job_id);
+    printf("[handle_agent] procesando 'RESERVE %d %s %d'\n", job_id, res, amount);
 
     char reply[TAM_BUF];
     int len;
@@ -338,6 +368,11 @@ static void reserve(uint64_t id, FdEntry *info, char *job_id_str, char *res, cha
             len = sprintf(reply, "GRANTED %d\n", job_id);
             if (send_msg(id, info, reply, len) == -1)
                 close_agent_conn(id, info);
+
+            char buff[TAM_BUF];
+            local_resources_to_str(buff);
+            printf("[handle_agent] local_resources=%s\n", buff);
+
             break;
     }
 }
@@ -383,30 +418,24 @@ static void release(FdEntry *info, char *job_id_str, char *res, char *amount_str
     int amount = atoi(amount_str);
 
     printf("[handle_agent] procesando 'RELEASE %d %s %d'\n", job_id, res, amount);
+
     local_resources_release(job_id, info->fd, res, amount);
+
+    char buff[TAM_BUF];
+    local_resources_to_str(buff);
+    printf("[handle_agent] local_resources=%s\n", buff);
+
     reservation_table_release(job_id);
 }
 
 /* Procesa "DENIED <job_id>" recibido de otro agente. */
 static void denied(char *job_id_str) {
-    if (job_id_str == NULL)
+    if (!job_id_str)
         return;
 
-    int job_id = atoi(job_id_str);
+    send_job_denied(job_id_str, 0, NULL);
 
-    char reply[TAM_BUF];
-    unsigned short len = sprintf(reply + NBYTES_PACKET_ERL, "JOB_DENIED %d", job_id);
-    unsigned short nlen = htons(len);
-    memcpy(reply, (char*)&nlen, NBYTES_PACKET_ERL);
-
-    FdEntry *scheduler_entry = fd_table_get_and_inc(scheduler_id);
-    if (scheduler_entry != NULL) {
-        if (send_msg(scheduler_id, scheduler_entry, reply, NBYTES_PACKET_ERL + len) == -1)
-            close_scheduler_conn(scheduler_entry);
-        fd_table_dec_and_release(scheduler_entry);
-    }
-
-    job_table_release(job_id);
+    job_table_release(atoi(job_id_str));
 }
 
 /* Maneja la recepcion de un mensaje de un agente, acumula
@@ -501,19 +530,17 @@ void handle_agent(uint64_t id, FdEntry* info) {
 (si el agente de ip:port esta en la tabla le manda "RESERVE 
 <res> <amount>, en caso contrario le avisa al scheduler y 
 descarta todo el job. */
-static void job_request(uint64_t id, FdEntry *info, char *job_id, char *reqs_str) {
+static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
     if (!info || !job_id || !reqs_str)
         return;
         
-    printf("[handle_scheduler] procesando JOB_REQUEST %s.\n", job_id);
+    printf("[handle_scheduler] procesando JOB_REQUEST %s", job_id);
     
     job_req_t reqs[MAX_JOB_RQ];
     int nreqs = 0;
     
     char request[TAM_BUF];
     unsigned short len;
-    char reply[TAM_BUF];
-    unsigned short nlen;
     
     FdEntry* agent_info;
     
@@ -530,43 +557,75 @@ static void job_request(uint64_t id, FdEntry *info, char *job_id, char *reqs_str
         char *res = strtok_r(NULL, colon, &saveptr2);
         char *amount = strtok_r(NULL, colon, &saveptr2);
 
+        printf(", procesando %s:%s:%s:%s", ip, port, res, amount);
+
         uint64_t agent_id;
         if (agent_table_get_id(ip, port, &agent_id) <= 0) { 
-            // El agente no se encuentra en la tabla de nodos
-            printf("No se encuentra el agente %s:%s.\n", ip, port);
+            // El agente no esta en la tabla de nodos
+            printf("\n");
+            printf("[handle_scheduler] No se encuentra el agente %s:%s.\n", ip, port);
 
-            // Le avisamos al scheduler
-            len = sprintf(reply + NBYTES_PACKET_ERL, "JOB_DENIED %s", job_id);
-            nlen = htons(len);
-            memcpy(reply, (char*)&nlen, NBYTES_PACKET_ERL);
-
-            if (send_msg(id, info, reply, NBYTES_PACKET_ERL + len) == -1)
-                close_scheduler_conn(info);
-
+            send_job_denied(job_id, 1, info);
             nreqs = 0;
             break;
         }
         else {
             // El agente esta en la tabla de nodos
             
-            // Establecemos conexion si todavia no se hizo
             if (agent_id == UINT64_MAX) {
-                int agent_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+                // No se establecio conexion
 
+                // Creamos el socket
+                int agent_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+                if (agent_fd == -1) {
+                    printf("\n");
+                    printf("[handle_scheduler] error (socket) estableciendo conexion con el agente %s:%s. \n", ip, port);
+
+                    send_job_denied(job_id, 1, info);
+                    nreqs = 0;
+                    break;
+                }
+
+                // Connect
                 struct sockaddr_in addr;
                 addr.sin_family = AF_INET;
                 inet_pton(AF_INET, ip, &addr.sin_addr);
                 addr.sin_port = htons(atoi(port));
-                connect(agent_fd, (struct sockaddr*)&addr, sizeof(addr));
-
-                agent_id = fd_table_add(agent_fd, FD_AGENT);
-                if (agent_id == UINT64_MAX || epoll_add(agent_fd, EPOLLIN | EPOLLET, agent_id) == -1) {
-                    if (agent_id != UINT64_MAX)
-                        fd_table_undo_add(agent_fd);
+                if (connect(agent_fd, (struct sockaddr*)&addr, sizeof(addr)) == -1 && errno != EINPROGRESS) {
+                    printf("\n");
+                    printf("[handle_scheduler] error (connect) estableciendo conexion con el agente %s:%s.\n", ip, port);
+                    
                     close(agent_fd);
-                    agent_id = UINT64_MAX;
+                    send_job_denied(job_id, 1, info);
+                    nreqs = 0;
+                    break;
                 }
 
+                // Agregamos el fd a la tabla y obtenemos el id (fd+reuse)
+                agent_id = fd_table_add(agent_fd, FD_AGENT);
+                if (agent_id == UINT64_MAX) {
+                    printf("\n");
+                    printf("[handle_scheduler] error (fd_table_add) estableciendo conexion con el agente %s:%s.\n", ip, port);
+                    
+                    close(agent_fd);
+                    send_job_denied(job_id, 1, info);
+                    nreqs = 0;
+                    break;
+                }
+
+                // Agregamos el fd a epoll
+                if (epoll_add(agent_fd, EPOLLIN | EPOLLET, agent_id) == -1) {
+                    printf("\n");
+                    printf("[handle_scheduler] error (epoll_add) estableciendo conexion con el agente %s:%s.\n", ip, port);
+
+                    fd_table_undo_add(agent_fd);
+                    close(agent_fd);
+                    send_job_denied(job_id, 1, info);
+                    nreqs = 0;
+                    break;
+                }
+
+                // Guardamos el id en la tabla de nodos
                 agent_table_set_id(ip, port, agent_id);
             }
 
@@ -592,6 +651,7 @@ static void job_request(uint64_t id, FdEntry *info, char *job_id, char *reqs_str
         }
     }
     if (nreqs != 0) {
+        printf("\n");
         job_table_add(atoi(job_id), nreqs, reqs);
     }
 }
@@ -699,7 +759,7 @@ int handle_scheduler(uint64_t id, FdEntry *info) {
             if (command_name != NULL && strncmp(command_name, "JOB_REQUEST", strlen("JOB_REQUEST")) == 0) {
                 char *job_id = strtok_r(NULL, space, &saveptr1);
                 char *reqs_str = strtok_r(NULL, "", &saveptr1); // resto de la linea
-                job_request(id, info, job_id, reqs_str);
+                job_request(info, job_id, reqs_str);
             }
             else if (command_name != NULL && strncmp(command_name, "JOB_RELEASE", strlen("JOB_RELEASE")) == 0) {
                 char *job_id = strtok_r(NULL, space, &saveptr1);
