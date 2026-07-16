@@ -26,14 +26,8 @@ typedef struct {
 // Crea la tabla de agentes
 void agent_table_init(void);
 
-// Destruye la tabla de agentes
-void agent_table_shutdown(void);
-
 // Agrega un agente
 void agent_table_add(char* ip, char* port, int count_resources, Resource* resources, int timerfd);
-
-// Busca un agente por su ip y puerto y devuelve un puntero al mismo si existe
-AgentNode* agent_table_get(char* ip, char* port);
 
 // Busca un agente por su ip y puerto y guarda su identificador en el parametro 'id'.
 // Devuelve 1 en caso de exito, 0 si el agente no se encuentra, o -1 en caso de error.

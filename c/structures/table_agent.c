@@ -15,25 +15,6 @@ void agent_table_init() {
     }
 }
 
-// Destruye la tabla de agentes
-void agent_table_shutdown() {
-    if (!table_agent) return;
-
-    pthread_mutex_lock(&(table_agent->mutex));
-
-    for (int i = 0; i < table_agent->used; i++) {
-        if (table_agent->entries[i].value != NULL) {
-            free(table_agent->entries[i].value);
-            table_agent->entries[i].value = NULL;
-        }
-    }
-
-    hash_destroy(table_agent, free);
-    table_agent = NULL;
-
-    pthread_mutex_unlock(&(table_agent->mutex));
-}
-
 // Crea un agente, retorna NULL en caso en error.
 static AgentNode* make_agent(char* ip, char* port, int count_resources, Resource* resources, int timerfd, uint64_t id) {
     AgentNode *new_node = malloc(sizeof(AgentNode));
@@ -91,23 +72,6 @@ void agent_table_add(char* ip, char* port, int count_resources, Resource* resour
     return;
 }
 
-// Busca un agente por su ip y puerto y devuelve una copia del mismo si existe,
-// en caso contrario o error devuelve NULL.
-AgentNode* agent_table_get(char* ip, char* port) {
-    if (!table_agent) return NULL;
-
-    char key[KEY_LEN];
-    make_key(ip, port, key, sizeof(key));
-
-    pthread_mutex_lock(&(table_agent->mutex));
-
-    AgentNode* agent = hash_get(table_agent, key, sizeof(AgentNode));
-
-    pthread_mutex_unlock(&(table_agent->mutex));
-
-    return agent;
-}
-
 // Busca un agente por su ip y puerto y guarda su identificador en el parametro 'id'.
 // Devuelve 1 en caso de exito, 0 si el agente no se encuentra, o -1 en caso de error.
 int agent_table_get_id(char* ip, char* port, uint64_t* id) {
@@ -126,10 +90,9 @@ int agent_table_get_id(char* ip, char* port, uint64_t* id) {
     }
 
     *id = agent->id;
+
     pthread_mutex_unlock(&(table_agent->mutex));
     
-    free(agent);
-
     return 1;
 }
 
@@ -142,7 +105,7 @@ void agent_table_set_id(const char *ip, const char *port, uint64_t id) {
 
     pthread_mutex_lock(&(table_agent->mutex));
 
-    AgentNode* agent = hash_get(table_agent, key, sizeof(AgentNode)); // copia
+    AgentNode* agent = hash_get(table_agent, key, sizeof(AgentNode));
     
     if (!agent) {
         pthread_mutex_unlock(&(table_agent->mutex));
@@ -150,9 +113,6 @@ void agent_table_set_id(const char *ip, const char *port, uint64_t id) {
     }
     
     agent->id = id;
-
-    AgentNode* old_agent = hash_set(table_agent, key, agent);
-    free(old_agent);
 
     pthread_mutex_unlock(&(table_agent->mutex));
 }
@@ -185,7 +145,7 @@ void agent_table_update(char* ip, char* port, Resource* resources, int count_res
 
     pthread_mutex_lock(&(table_agent->mutex));
 
-    AgentNode* agent = hash_get(table_agent, key, sizeof(AgentNode)); // copia
+    AgentNode* agent = hash_get(table_agent, key, sizeof(AgentNode));
     
     if (!agent) {
         pthread_mutex_unlock(&(table_agent->mutex));
@@ -203,9 +163,6 @@ void agent_table_update(char* ip, char* port, Resource* resources, int count_res
             agent->resources[i].available = resources[i].available; 
         }
     }
-
-    AgentNode* old_agent = hash_set(table_agent, key, agent);
-    free(old_agent);
 
     pthread_mutex_unlock(&(table_agent->mutex));
 }
@@ -227,7 +184,6 @@ int agent_table_get_timerfd(const char *ip, const char *port) {
     }
 
     int timer_fd = agent->timerfd;
-    free(agent);
 
     pthread_mutex_unlock(&(table_agent->mutex));
     
@@ -251,9 +207,6 @@ void agent_table_set_timerfd(const char *ip, const char *port, int newTimerfd) {
     }
 
     agent->timerfd = newTimerfd;
-
-    AgentNode* old_agent = hash_set(table_agent, key, agent);
-    free(old_agent);
 
     pthread_mutex_unlock(&(table_agent->mutex));
 }

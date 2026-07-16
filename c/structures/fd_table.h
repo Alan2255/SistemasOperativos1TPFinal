@@ -18,13 +18,23 @@
 #include "hash.h"
 
 typedef enum {
-    FD_SCHEDULER,
+    // Solo 1 fd de cada tipo durante toda la ejecucion del programa (no se cierran)
     FD_UDP,
-    FD_AGENT,
-    FD_NODE_TIMER,
     FD_SEND_ANNOUNCE_TIMER,
     FD_AGENTS_LISTEN,
     FD_SCHEDULER_LISTEN,
+
+    // Solo 1 fd a la vez, se puede desconectar y reconectar. Puede ser usado
+    // por varios threads a la vez: el cierre se coordina con ref_count/close
+    FD_SCHEDULER,
+
+    // Varios en runtime, uno por conexion con otro agente. Pueden ser usados
+    // por varios threads a la vez: el cierre se coordina con ref_count/clos
+    FD_AGENT,
+
+    // Varios en runtime, uno por agente en agent_table. Cada uno lo maneja
+    // un unico thread (es entregado por epoll solo una vez)
+    FD_AGENT_TIMER
 } fdtype;
 
 typedef struct {
@@ -58,9 +68,6 @@ extern Hash *fd_table;
 
 /* Inicializa la tabla. */
 void fd_table_init();
-
-/* Destruye la tabla. */
-void fd_table_destroy();
 
 /* Registra fd en la tabla. Si es la primera vez que se registra,
 crea la entrada con 'reuse' en 0; si ya existia, se usa esa entrada y

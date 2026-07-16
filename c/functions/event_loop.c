@@ -18,9 +18,8 @@ void* event_loop(void*) {
             return NULL;
         for (n = 0; n < nfds; ++n) {
             uint64_t id = events[n].data.u64;
-            
             FdEntry* info = fd_table_get_and_inc(id);
-            printf("[event_loop] 0x%" PRIx64 ", info=%p\n", id, info);
+            // printf("[event_loop] 0x%016" PRIx64 ", info=%p\n", id, info);
             if (info == NULL) {
                 continue;
             }
@@ -48,8 +47,8 @@ void* event_loop(void*) {
                         handle_agent(id, info);
                     break;
 
-                case FD_NODE_TIMER:
-                    handle_node_timer(info);
+                case FD_AGENT_TIMER:
+                    handle_agent_timer(info);
                     break;
 
                 case FD_SEND_ANNOUNCE_TIMER:

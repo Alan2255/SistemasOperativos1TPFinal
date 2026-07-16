@@ -151,7 +151,7 @@ int handle_tcp_epollout(uint64_t id, FdEntry* info) {
 
 /* Maneja el evento en el timer para considerar a un
 nodo como caido. */
-void handle_node_timer(FdEntry* info) {
+void handle_agent_timer(FdEntry* info) {
     fd_node_timer_data* data = info->data;
 
     // Eliminamos el nodo de la tabla
@@ -195,7 +195,7 @@ void handle_listen_scheduler(FdEntry* info) {
     }
     scheduler_id = new_id;
 
-    printf("[handle_listen_scheduler] se conecto el scheduler con el id %" PRIx64 "\n", scheduler_id);
+    printf("[handle_listen_scheduler] se conecto el scheduler con el id %016" PRIx64 "\n", scheduler_id);
 
 }
 
@@ -224,7 +224,7 @@ void handle_agent_connect(FdEntry* info) {
             return;
         }
 
-        printf("[handle_agent_connect] aceptamos un agente con el id 0x%" PRIx64 "\n", agent_id);
+        printf("[handle_agent_connect] aceptamos un agente con el id 0x%016" PRIx64 "\n", agent_id);
         
     }
 }
@@ -281,7 +281,7 @@ void handle_announce(FdEntry* info) {
             agent_table_add(ip, port, res_count, resources, timerfd);
 
             // Agregamos el timer a la instancia epoll
-            uint64_t timer_id = fd_table_add(timerfd, FD_NODE_TIMER);
+            uint64_t timer_id = fd_table_add(timerfd, FD_AGENT_TIMER);
             if (timer_id == UINT64_MAX) {
                 close(timerfd);
                 return;

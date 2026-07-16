@@ -58,7 +58,7 @@ int handle_tcp_epollout(uint64_t id, FdEntry* info);
 
 /* Maneja el evento en el timer para considerar a un
 nodo como caido. */
-void handle_node_timer(FdEntry* info);
+void handle_agent_timer(FdEntry* info);
 
 /* Maneja el evento en el timer para lanzar el anuncio. */
 void handle_announce_timer(FdEntry* info);
