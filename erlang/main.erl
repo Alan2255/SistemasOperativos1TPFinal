@@ -23,8 +23,7 @@ generate_jobs(N) ->
             Cantidad = integer_to_list(rand:uniform(CantRandom)),%Cant random del recurso elegido de 1 hasta lo max q pueda pedir
 
             Job = Recurso ++ ":" ++ Cantidad, %esto crea el Job EJ : "recursorandom:numrandom"
-            pid_scheduler_job ! {JobID, Job, 1},
-            io:format("[job_generator] ~p ~p ~p ~n",[JobID, Job, 1]);
+            pid_scheduler_job ! {JobID, Job, 1};
 
          2 ->    
              Indice_ignorar = rand:uniform(3),
@@ -53,6 +52,7 @@ generate_jobs(N) ->
              Job = Recurso1 ++ ":" ++ Cantidad1 ++ ":" ++ Recurso2 ++ ":" ++ Cantidad2 ++ ":" ++  Recurso3 ++ ":" ++ Cantidad3,
              pid_scheduler_job ! {JobID, Job, 3}
         end,
+    io:format("[job_generator] ~p ~p ~p ~n",[JobID, Job, Eleccion_recursos]),
     generate_jobs(N-1).%Ya generamos un job restamos el N de cantidad a generar y llamamos de nuevo a la funcion.
 
 % Recibe por mensaje JobID(int), Job(string), CantRecursos(int) y crea SIN LINK un proceso que maneje este job, se vuelve a llamar recursivamente para seguir atendiendo jobs
