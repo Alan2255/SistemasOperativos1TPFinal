@@ -53,23 +53,15 @@ job_table_t* make_job(int job_id, int nreqs, const job_req_t *reqs) {
 // Agrega un job
 bool job_table_add(int job_id, int nreqs, const job_req_t *reqs) {
     if (!table_job || !reqs || nreqs <= 0) return false;
-
-    pthread_mutex_lock(&(table_job->mutex));
-
-    job_table_t* new_job = make_job(job_id, nreqs, reqs);
-
+    
     char key[32];
     make_key(job_id, key, sizeof(key));
+    job_table_t* new_job = make_job(job_id, nreqs, reqs);
 
-    job_table_t* old_node = hash_set(table_job, key, new_job);
-
-    if (old_node != NULL) {
-        // Este free evita leaks de memoria si pisamos una entrada en la tabla de jobs
-        // No deberia ocurrir nunca que se pise una entrada
-        free(old_node);
-    }
-
+    pthread_mutex_lock(&(table_job->mutex));
+    hash_set(table_job, key, new_job);
     pthread_mutex_unlock(&(table_job->mutex));
+
     return true;
 }
 
@@ -77,12 +69,11 @@ bool job_table_add(int job_id, int nreqs, const job_req_t *reqs) {
 bool job_table_release(int job_id) {
     if (!table_job) return false;
 
-    pthread_mutex_lock(&(table_job->mutex));
-
     char key[32];
     make_key(job_id, key, sizeof(key));
-    bool remove_result = hash_remove(table_job, key, free);
 
+    pthread_mutex_lock(&(table_job->mutex));
+    bool remove_result = hash_remove(table_job, key, free);
     pthread_mutex_unlock(&(table_job->mutex));
 
     return remove_result;
@@ -92,13 +83,11 @@ bool job_table_release(int job_id) {
 job_table_t* job_table_get(int job_id) {
     if (!table_job) return NULL;
 
-    pthread_mutex_lock(&(table_job->mutex));
-
     char key[32];
     make_key(job_id, key, sizeof(key));
 
+    pthread_mutex_lock(&(table_job->mutex));
     job_table_t* job = hash_get(table_job, key, sizeof(job_table_t));
-
     pthread_mutex_unlock(&(table_job->mutex));
 
     return job;
@@ -120,11 +109,8 @@ int job_table_check_granted(int job_id) {
         return -1;
     }
 
-    int result = (job->nreqs == job->ngranted);
-
-    free(job);
     pthread_mutex_unlock(&(table_job->mutex));
-    return result;
+    return job->nreqs == job->ngranted;
 }
 
 // Devuelve un string con la tabla de jobs para imprimir.
@@ -185,9 +171,6 @@ bool job_table_inc_ngranted(int job_id) {
     }
 
     job->ngranted++;
-
-    job_table_t* old_job = hash_set(table_job, key, job);
-    free(old_job);
 
     pthread_mutex_unlock(&(table_job->mutex));
     return true;

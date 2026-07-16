@@ -33,7 +33,7 @@ bool reservation_table_release(int job_id);
 // Cambia el estado de una reserva
 bool reservation_table_set_granted(int job_id, int granted);
 
-// Busca una reserva por ID 
+// Busca una reserva por ID y devuelve un puntero a la misma si existe
 reservation_t* reservation_table_get(int job_id);
 
 // Elimina todas las reservas asociadas a un socket (src_fd)

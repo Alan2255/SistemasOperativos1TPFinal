@@ -38,7 +38,7 @@ void hash_replace(Hash *table, const char *key, void *value);
 // Agrega o modifica un elemento
 void* hash_set(Hash *dict, const char *key, void *value);
 
-// Busca el elemento mediante su key y lo devuelve si existe
+// Busca el elemento mediante su key y devuelve un puntero al mismo si existe
 void* hash_get(Hash *table, const char *key, size_t element_size);
 
 // Borra un elemento de la tabla

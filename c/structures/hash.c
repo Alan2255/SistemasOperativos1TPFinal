@@ -98,11 +98,7 @@ void hash_replace(Hash *table, const char *key, void *value) {
     while (table->indices[idx] != -1) {
         int entry_idx = table->indices[idx];
         if (table->entries[entry_idx].key != NULL && strcmp(table->entries[entry_idx].key, key) == 0) {
-            void *old_value = table->entries[entry_idx].value;
-            // Si ya existe, sobreescribimos el valor
             table->entries[entry_idx].value = value;
-            // Liberamos el valor pisado
-            free(old_value);
             return;
         }
         idx = (idx + 1) & (table->capacity - 1);
@@ -121,10 +117,9 @@ void* hash_set(Hash *table, const char *key, void *value) {
     while (table->indices[idx] != -1) {
         int entry_idx = table->indices[idx];
         if (table->entries[entry_idx].key != NULL && strcmp(table->entries[entry_idx].key, key) == 0) {
-            void *old_value = table->entries[entry_idx].value;
             // Si ya existe, sobreescribimos el valor
             table->entries[entry_idx].value = value;
-            return old_value;
+            return NULL;
         }
         idx = (idx + 1) & (table->capacity - 1);
     }
@@ -152,6 +147,7 @@ void* hash_set(Hash *table, const char *key, void *value) {
     return NULL;
 }
 
+// Busca el elemento mediante su key y devuelve un puntero al mismo si existe
 void* hash_get(Hash *table, const char *key, size_t element_size) {
     if (!table || !key || element_size == 0) return NULL;
 
@@ -162,13 +158,7 @@ void* hash_get(Hash *table, const char *key, size_t element_size) {
         int entry_idx = table->indices[idx];
         if (table->entries[entry_idx].key != NULL && strcmp(table->entries[entry_idx].key, key) == 0) {
             void *value = table->entries[entry_idx].value;
-            if (!value) return NULL;
-
-            void *copy = malloc(element_size);
-            if (!copy) return NULL;
-
-            memcpy(copy, value, element_size);
-            return copy;
+            return value;
         }
         idx = (idx + 1) & (table->capacity - 1);
     }
