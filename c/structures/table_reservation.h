@@ -28,13 +28,13 @@ void reservation_table_shutdown(void);
 bool reservation_table_add(int job_id, int src_fd, const char* res_name, int amount, int granted);
 
 // Elimina una reserva
-bool reservation_table_release(int job_id);
+bool reservation_table_release(int job_id, int src_fd, const char* res_name);
 
 // Cambia el estado de una reserva
-bool reservation_table_set_granted(int job_id, int granted);
+bool reservation_table_set_granted(int job_id, int src_fd, const char* res_name, int granted);
 
 // Busca una reserva por ID y devuelve un puntero a la misma si existe
-reservation_t* reservation_table_get(int job_id);
+reservation_t* reservation_table_get(int job_id, int src_fd, const char* res_name);
 
 // Elimina todas las reservas asociadas a un socket (src_fd)
 void reservation_table_release_by_socket(int src_fd);

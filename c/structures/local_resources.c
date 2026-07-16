@@ -5,7 +5,8 @@
 #include "local_resources.h"
 
 // Queue
-static void queue_init(JobQueue *q) {
+static void queue_init(JobQueue *q, char* res_name) {
+    strcpy(q->name, res_name);
     q->front = 0;
     q->rear = -1;
     q->count = 0;
@@ -41,11 +42,11 @@ static int queue_top(JobQueue *q) {
     if (queue_is_empty(q)) {
         return -1;
     }
-    return q->job_ids[q->front];
+    return q->front;
 }
 
 // Busca un recurso y lo devuelve un puntero al mismo si existe
-static Resource* find_resource(const char* name) {
+static Resource* find_resource(char* name) {
     for (int i = 0; i < resource_count; i++) {
         if (strncmp(resources[i].name, name, MAX_BYTES_NAME_RESOURCE) == 0) {
             return &resources[i];
@@ -74,7 +75,7 @@ void local_resources_init(int num_resources, char* resource_names[], int capacit
         resources[i].total_capacity = capacities[i];
         resources[i].available = capacities[i];
         
-        queue_init(&resources[i].job_pendings);
+        queue_init(&resources[i].job_pendings, resource_names[i]);
 
         pthread_mutex_init(&resources[i].mutex, NULL);
     }
@@ -116,11 +117,11 @@ int local_resources_reserve(int job_id, int socket, char* resource_name, int amo
 }
 
 // Recupera los recursos y atiende pedidos pendientes
-void local_resources_release( int job_id, int source_fd, char* resource_name, int amount) {
+void local_resources_release(int job_id, int source_fd, char* resource_name, int amount) {
     Resource* resource = find_resource(resource_name);
     if (!resource) return;
 
-    reservation_t * reservation = reservation_table_get(job_id);
+    reservation_t * reservation = reservation_table_get(job_id, source_fd, resource_name);
     if (!reservation) return;
 
     pthread_mutex_lock(&resource->mutex);
@@ -135,7 +136,7 @@ void local_resources_release( int job_id, int source_fd, char* resource_name, in
     // No se utilizaron y se cancelo la espera
     else {
         JobQueue aux;
-        queue_init(&aux);
+        queue_init(&aux, resource_name);
 
         // Elimina un elemento de la cola (no necesariamente el primero)
         while (!queue_is_empty(&resource->job_pendings)) {
@@ -160,9 +161,15 @@ void local_resources_release( int job_id, int source_fd, char* resource_name, in
 
     // Atiende los pedidos pendientes 
     while (!queue_is_empty(&resource->job_pendings)) {
-        int next_job_id = queue_top(&resource->job_pendings);
-        reservation_t* next_res = reservation_table_get(next_job_id);
+        int next_job_idx = queue_top(&resource->job_pendings);
         
+        int job_id = (resource->job_pendings).job_ids[next_job_idx];
+        int src_fd = (resource->job_pendings).sockets[next_job_idx];
+        char res_name[MAX_BYTES_NAME_RESOURCE];
+        strcpy(res_name, (resource->job_pendings).name);
+        
+        reservation_t* next_res = reservation_table_get(job_id, src_fd, res_name);
+
         if (next_res == NULL) {
             queue_pop(&resource->job_pendings);
             continue;
@@ -171,7 +178,8 @@ void local_resources_release( int job_id, int source_fd, char* resource_name, in
         if (resource->available >= next_res->amount) {
             queue_pop(&resource->job_pendings);
             resource->available -= next_res->amount;
-            reservation_table_set_granted(next_job_id, 1);
+            
+            reservation_table_set_granted(job_id, src_fd, res_name, 1);
         } else {
             break;
         }

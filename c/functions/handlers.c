@@ -421,7 +421,7 @@ static void release(FdEntry *info, char *job_id_str, char *res, char *amount_str
     local_resources_to_str(buff);
     printf("[handle_agent] local_resources=%s\n", buff);
 
-    reservation_table_release(job_id);
+    reservation_table_release(job_id, info->fd, res);
 }
 
 /* Procesa "DENIED <job_id>" recibido de otro agente. */

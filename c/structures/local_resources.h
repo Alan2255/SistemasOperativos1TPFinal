@@ -7,11 +7,12 @@
 
 // Cola de trabajos pendientes
 typedef struct {
-    int job_ids[MAX_RESERVATIONS]; // Array donde guardamos los IDs de los jobs en espera
-    int sockets[MAX_RESERVATIONS]; // Array donde guardamos los sockets de los pedidos
-    int front;                     // Índice al primer elemento (para desencolar)
-    int rear;                      // Índice al último elemento (para encolar)
-    int count;                     // Cuántos jobs hay esperando actualmente
+    char name[MAX_BYTES_NAME_RESOURCE];  // Nombre del recurso de la cola
+    int job_ids[MAX_RESERVATIONS];       // Array donde guardamos los IDs de los jobs en espera
+    int sockets[MAX_RESERVATIONS];       // Array donde guardamos los sockets de los pedidos
+    int front;                           // Índice al primer elemento (para desencolar)
+    int rear;                            // Índice al último elemento (para encolar)
+    int count;                           // Cuántos jobs hay esperando actualmente
 } JobQueue;
 
 // Recursos locales
