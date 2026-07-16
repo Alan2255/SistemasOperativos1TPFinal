@@ -90,7 +90,7 @@ bool reservation_table_set_granted(int job_id, int src_fd, const char* res_name,
     reservation_t *reserva = hash_get(table_reservation, key, sizeof(reservation_t));
 
     if (reserva != NULL) {
-        reserva->granted = 1;
+        reserva->granted = granted;
     }
     pthread_mutex_unlock(&(table_reservation->mutex));
 
