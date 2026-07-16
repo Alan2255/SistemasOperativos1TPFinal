@@ -2,21 +2,26 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/epoll.h>
+#include <stdint.h>
+#include <inttypes.h>
 #include "fd_table.h"
 #include "../functions/functions.h"
 
 Hash *fd_table = NULL;
 
-static void fd_key(int fd, char *out, size_t max_len) {
+static void make_key(int fd, char *out, size_t max_len) {
     snprintf(out, max_len, "%d", fd);
 }
 
 // Libera la entrada (pone el fd en -1 y libera la memoria de data)
-void release_entry(FdEntry *entry) {
-    if (!entry || !entry->data)
+static void release_entry(FdEntry *entry) {
+    if (!entry)
         return;
 
     entry->fd = -1;
+
+    if (!entry->data)
+        return;
 
     if (entry->type == FD_SCHEDULER || entry->type == FD_AGENT) {
         pthread_mutex_destroy(&((fd_tcp_data*)entry->data)->mutex_in);
@@ -59,30 +64,11 @@ Retorna el identificador de la entrada, o UINT64_MAX en caso de error. */
 uint64_t fd_table_add(int fd, fdtype type) {
     if (!fd_table) return UINT64_MAX;
 
-    char key[16];
-    fd_key(fd, key, sizeof(key));
-
-    FdEntry *entry = (FdEntry*)hash_get(fd_table, key, sizeof(FdEntry));
-    int is_new = entry == NULL;
-
-    if (is_new) {
-        entry = malloc(sizeof(FdEntry));
-        if (entry == NULL) {
-            return UINT64_MAX;
-        }
-
-        entry->reuse = 0;
-        entry->fd = -1;
-        entry->data = NULL;
-        pthread_mutex_init(&entry->mutex, NULL);
-
-        hash_set(fd_table, key, entry);
-    }
-
+    // Creamos el campo data
     void *data;
     if (type == FD_SCHEDULER || type == FD_AGENT) {
         fd_tcp_data *tcp_data = malloc(sizeof(fd_tcp_data));
-        if (tcp_data == NULL) {
+        if (!tcp_data) {
             return UINT64_MAX;
         }
 
@@ -107,13 +93,31 @@ uint64_t fd_table_add(int fd, fdtype type) {
         data = NULL;
     }
 
+    char key[16];
+    make_key(fd, key, sizeof(key));
+
+    FdEntry *entry = (FdEntry*)hash_get(fd_table, key, sizeof(FdEntry));
+    int is_new = entry == NULL;
+
+    if (is_new) {
+        entry = malloc(sizeof(FdEntry));
+        if (entry == NULL) {
+            return UINT64_MAX;
+        }
+
+        entry->reuse = 0;
+        pthread_mutex_init(&entry->mutex, NULL);
+    }
+
     pthread_mutex_lock(&entry->mutex);
-    if (!is_new)
-        entry->reuse++;
     entry->fd = fd;
+    if (!is_new) entry->reuse++;
     entry->type = type;
     entry->data = data;
-    uint64_t id = ((uint64_t)(uint32_t)fd << 32) | (uint32_t)entry->reuse; // NO ES SUFICIENTE Y MAS CLARO CASTEAR fd y resuse A (uint64_t)?
+    FdEntry *old_entry = hash_set(fd_table, key, entry);
+    if (!is_new) free(old_entry);
+    uint64_t id = ((uint64_t)(uint32_t)fd << 32) | (uint32_t)entry->reuse;
+    // printf("[fd_table_add] 0x%" PRIx64 ", entry: fd=%d, reuse=%d, type=%d, data=%p\n", id, entry->fd, entry->reuse, entry->type, entry->data);
     pthread_mutex_unlock(&entry->mutex);
 
     return id;
@@ -125,7 +129,7 @@ void fd_table_undo_add(int fd) {
     if (!fd_table) return;
 
     char key[16];
-    fd_key(fd, key, sizeof(key));
+    make_key(fd, key, sizeof(key));
 
     FdEntry *entry = (FdEntry*)hash_get(fd_table, key, sizeof(FdEntry));
     if (entry == NULL)
@@ -134,6 +138,8 @@ void fd_table_undo_add(int fd) {
     pthread_mutex_lock(&entry->mutex);
     if (entry->fd == fd) {
         release_entry(entry);
+        FdEntry *old_entry = hash_set(fd_table, key, entry);
+        free(old_entry);
     }
     pthread_mutex_unlock(&entry->mutex);
 }
@@ -150,17 +156,19 @@ FdEntry* fd_table_get_and_inc(uint64_t id) {
     unsigned int reuse = (unsigned int)(id & 0xFFFFFFFFu);
 
     char key[16];
-    fd_key(fd, key, sizeof(key));
+    make_key(fd, key, sizeof(key));
 
     FdEntry *entry = (FdEntry*)hash_get(fd_table, key, sizeof(FdEntry));
-    if (!entry)
+    if (!entry) {
         return NULL;
+    }
 
     pthread_mutex_lock(&entry->mutex);
 
     if (entry->fd == -1 || entry->reuse != reuse) {
         // fd cerrado, o evento viejo de una conexion anterior con el mismo fd
         pthread_mutex_unlock(&entry->mutex);
+        free(entry);
         return NULL;
     }
 
@@ -171,13 +179,15 @@ FdEntry* fd_table_get_and_inc(uint64_t id) {
             // Ya fue pedido el cierre: no lo entregamos a otro handler
             pthread_mutex_unlock(&data->mutex_state);
             pthread_mutex_unlock(&entry->mutex);
+            free(entry);
             return NULL;
         }
-        data->ref_count++;
+        data->ref_count++; //=====================se hace?
         pthread_mutex_unlock(&data->mutex_state);
     }
 
     pthread_mutex_unlock(&entry->mutex);
+    
     return entry;
 }
 

@@ -5,6 +5,8 @@
 #include "../structures/fd_table.h"
 #include "functions.h"
 #include <stdio.h>
+#include <stdint.h>
+#include <inttypes.h>
 
 /* Event loop de la instancia epoll para correr en cada thread. */
 void* event_loop(void*) {
@@ -16,7 +18,9 @@ void* event_loop(void*) {
             return NULL;
         for (n = 0; n < nfds; ++n) {
             uint64_t id = events[n].data.u64;
+            
             FdEntry* info = fd_table_get_and_inc(id);
+            printf("[event_loop] 0x%" PRIx64 ", info=%p\n", id, info);
             if (info == NULL) {
                 continue;
             }

@@ -47,7 +47,7 @@ typedef struct {
 } fd_node_timer_data;
 
 typedef struct {
-    int fd;                // -1 si esta cerrad
+    int fd;                // -1 si no esta en uso
     unsigned int reuse;    // cantidad de veces que se reutilizo esta entrada
     fdtype type;
     void *data;

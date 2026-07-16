@@ -44,6 +44,7 @@ job_table_t* make_job(int job_id, int nreqs, const job_req_t *reqs) {
 
     new_job->job_id = job_id;
     new_job->nreqs = cantidad_a_copiar;
+    new_job->ngranted = 0;
     memcpy(new_job->reqs, reqs, cantidad_a_copiar * sizeof(job_req_t));
 
     return new_job;
@@ -119,17 +120,11 @@ int job_table_check_granted(int job_id) {
         return -1;
     }
 
-    for (int i = 0; i < job->nreqs; i++) {
-        if (!(job->reqs[i].granted)) {
-            free(job);
-            pthread_mutex_unlock(&(table_job->mutex));
-            return 0;
-        }
-    }
+    int result = (job->nreqs == job->ngranted);
 
     free(job);
     pthread_mutex_unlock(&(table_job->mutex));
-    return 1;
+    return result;
 }
 
 // Devuelve un string con la tabla de jobs para imprimir.
@@ -154,17 +149,17 @@ char* job_table_to_string() {
 
         job_table_t *job = (job_table_t*)table_job->entries[i].value;
         written += snprintf(buf + written, buf_tam - written,
-                           "{job_id %d: ", job->job_id);
+                           "{job_id %d ngranted=%d/%d: ", job->job_id, job->ngranted, job->nreqs);
 
         const job_req_t *r = &job->reqs[0];
         written += snprintf(buf + written, buf_tam - written,
-                            "%s:%s res=%s amount=%d granted=%d",
-                            r->dest_ip, r->dest_port, r->res, r->amount, r->granted);
+                            "%s:%s res=%s amount=%d",
+                            r->dest_ip, r->dest_port, r->res, r->amount);
         for (int j = 1; j < job->nreqs; j++) {
             r = &job->reqs[j];
             written += snprintf(buf + written, buf_tam - written,
-                               ", %s:%s res=%s amount=%d granted=%d",
-                               r->dest_ip, r->dest_port, r->res, r->amount, r->granted);
+                               ", %s:%s res=%s amount=%d",
+                               r->dest_ip, r->dest_port, r->res, r->amount);
         }
         written += snprintf(buf + written, buf_tam - written, "}\n");
     }
@@ -173,38 +168,29 @@ char* job_table_to_string() {
     return buf;
 }
 
-// Marca el pedido del job correspondiente a 'ip' como 'val'
-bool job_table_set_granted(int job_id, char* ip, char* port, int val) {
-    if (!table_job) return NULL;
+// Incrementa la cantidad de pedidos concedidos del job
+bool job_table_inc_ngranted(int job_id) {
+    if (!table_job) return false;
 
     char key[32];
     make_key(job_id, key, sizeof(key));
-    
+
     pthread_mutex_lock(&(table_job->mutex));
-    
+
     job_table_t* job = hash_get(table_job, key, sizeof(job_table_t));
 
-    if (!job || !ip) {
+    if (!job) {
         pthread_mutex_unlock(&(table_job->mutex));
         return false;
     }
 
-    for (int i = 0; i < job->nreqs; i++) {
-        int same_ip = strncmp(job->reqs[i].dest_ip, ip, INET_ADDRSTRLEN) == 0;
-        int same_port = strncmp(job->reqs[i].dest_port, port, PORTSTRLEN) == 0;
-        if (same_ip && same_port) {
-            job->reqs[i].granted = val;
-            
-            job_table_t* old_job = hash_set(table_job, key, job);
-            free(old_job);
-            
-            pthread_mutex_unlock(&(table_job->mutex));
-            return true;
-        }
-    }
-    free(job);
+    job->ngranted++;
+
+    job_table_t* old_job = hash_set(table_job, key, job);
+    free(old_job);
+
     pthread_mutex_unlock(&(table_job->mutex));
-    return false;
+    return true;
 }
 
 // Saca de la tabla, sin liberar su memoria, el job con 

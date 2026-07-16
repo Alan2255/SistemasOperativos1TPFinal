@@ -125,9 +125,9 @@ int agent_table_get_id(char* ip, char* port, uint64_t* id) {
         return 0;
     }
 
+    *id = agent->id;
     pthread_mutex_unlock(&(table_agent->mutex));
     
-    *id = agent->id;
     free(agent);
 
     return 1;

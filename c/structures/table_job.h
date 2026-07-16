@@ -9,12 +9,11 @@
 extern Hash *table_job;
 
 // Request de un recurso
-typedef struct { 
+typedef struct {
     char dest_ip[INET_ADDRSTRLEN];
     char dest_port[PORTSTRLEN];
     char res[MAX_BYTES_NAME_RESOURCE];
-    int amount; 
-    int granted;
+    int amount;
 } job_req_t;
 
 // Job activo
@@ -22,6 +21,7 @@ typedef struct {
     int job_id;
     job_req_t reqs[MAX_JOB_RQ];
     int nreqs;
+    int ngranted;
 } job_table_t;
 
 // --- API de tabla de jobs activos ---
@@ -52,7 +52,7 @@ job_table_t** job_table_extract_all();
 // Chequea si todos los requisitos del job están concedidos
 int job_table_check_granted(int job_id);
 
-// Marca el pedido del job correspondiente al ip y puerto como 'val'
-bool job_table_set_granted(int job_id, char* ip, char* port, int val);
+// Incrementa la cantidad de pedidos concedidos del job
+bool job_table_inc_ngranted(int job_id);
 
 #endif

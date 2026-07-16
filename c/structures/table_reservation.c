@@ -81,12 +81,6 @@ bool reservation_table_release(int job_id) {
 
     pthread_mutex_lock(&(table_reservation->mutex));
 
-    reservation_t *reserva = (reservation_t*)hash_get(table_reservation, key, sizeof(reservation_t));
-
-    if (reserva != NULL) {
-        free(reserva);
-    }
-
     bool result_remove = hash_remove(table_reservation, key, free);
 
     pthread_mutex_unlock(&(table_reservation->mutex));
@@ -151,12 +145,8 @@ void reservation_table_release_by_socket(int src_fd) {
             char key[32];
             fun_hash(reserva->job_id, key, sizeof(key)); 
             
-            // Eliminamos la reserva de la tabla 
+            // Eliminamos la reserva de la tabla (libera su memoria)
             hash_remove(table_reservation, key, free);
-
-            // Liberamos la memoria de la estructura de la reserva
-            free(reserva);
-            table_reservation->entries[i].value = NULL; 
         }
     }
 

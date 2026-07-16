@@ -92,7 +92,6 @@ static int send_msg(uint64_t id, FdEntry* info, char* msg, int len) {
     }
     else {
         int n = send(info->fd, msg, len, MSG_NOSIGNAL);
-
         if (n == -1) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // El socket esta temporalmente lleno, encolamos TODO el mensaje
@@ -225,7 +224,7 @@ void handle_agent_connect(FdEntry* info) {
             return;
         }
 
-        printf("[handle_agent_connect] aceptamos un agente con el id %" PRIx64 "\n", agent_id);
+        printf("[handle_agent_connect] aceptamos un agente con el id 0x%" PRIx64 "\n", agent_id);
         
     }
 }
@@ -378,17 +377,14 @@ static void reserve(uint64_t id, FdEntry *info, char *job_id_str, char *res, cha
 }
 
 /* Procesa "GRANTED <job_id>" recibido de otro agente. */
-static void granted(uint64_t id, char *job_id_str) {
+static void granted(char *job_id_str) {
     if (job_id_str == NULL)
         return;
 
     int job_id = atoi(job_id_str);
     printf("[handle_agent] procesando 'GRANTED %d'\n", job_id);
 
-    char ip[INET_ADDRSTRLEN];
-    char port[PORTSTRLEN];
-    agent_table_get_addr_by_id(id, ip, port);
-    job_table_set_granted(job_id, ip, port, 1);
+    job_table_inc_ngranted(job_id);
 
     if (job_table_check_granted(job_id)) {
         printf("[handle_agent] mandando ");
@@ -488,7 +484,7 @@ void handle_agent(uint64_t id, FdEntry* info) {
                 reserve(id, info, job_id_str, res, amount_str);
             }
             else if (command_name != NULL && strncmp(command_name, "GRANTED", strlen("GRANTED")) == 0) {
-                granted(id, job_id_str);
+                granted(job_id_str);
             }
             else if (command_name != NULL && strncmp(command_name, "RELEASE", strlen("RELEASE")) == 0) {
                 release(info, job_id_str, res, amount_str);
@@ -534,7 +530,7 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
     if (!info || !job_id || !reqs_str)
         return;
         
-    printf("[handle_scheduler] procesando JOB_REQUEST %s", job_id);
+    printf("[handle_scheduler] procesando JOB_REQUEST %s\n", job_id);
     
     job_req_t reqs[MAX_JOB_RQ];
     int nreqs = 0;
@@ -557,12 +553,11 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
         char *res = strtok_r(NULL, colon, &saveptr2);
         char *amount = strtok_r(NULL, colon, &saveptr2);
 
-        printf(", procesando %s:%s:%s:%s", ip, port, res, amount);
+        printf("[handle_scheduler] procesando %s:%s:%s:%s\n", ip, port, res, amount);
 
         uint64_t agent_id;
         if (agent_table_get_id(ip, port, &agent_id) <= 0) { 
             // El agente no esta en la tabla de nodos
-            printf("\n");
             printf("[handle_scheduler] No se encuentra el agente %s:%s.\n", ip, port);
 
             send_job_denied(job_id, 1, info);
@@ -578,7 +573,6 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
                 // Creamos el socket
                 int agent_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
                 if (agent_fd == -1) {
-                    printf("\n");
                     printf("[handle_scheduler] error (socket) estableciendo conexion con el agente %s:%s. \n", ip, port);
 
                     send_job_denied(job_id, 1, info);
@@ -591,8 +585,8 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
                 addr.sin_family = AF_INET;
                 inet_pton(AF_INET, ip, &addr.sin_addr);
                 addr.sin_port = htons(atoi(port));
+                printf("[handle_scheduler] conectando el socket %d a %s:%s\n", agent_fd, ip, port);
                 if (connect(agent_fd, (struct sockaddr*)&addr, sizeof(addr)) == -1 && errno != EINPROGRESS) {
-                    printf("\n");
                     printf("[handle_scheduler] error (connect) estableciendo conexion con el agente %s:%s.\n", ip, port);
                     
                     close(agent_fd);
@@ -604,7 +598,6 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
                 // Agregamos el fd a la tabla y obtenemos el id (fd+reuse)
                 agent_id = fd_table_add(agent_fd, FD_AGENT);
                 if (agent_id == UINT64_MAX) {
-                    printf("\n");
                     printf("[handle_scheduler] error (fd_table_add) estableciendo conexion con el agente %s:%s.\n", ip, port);
                     
                     close(agent_fd);
@@ -615,7 +608,6 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
 
                 // Agregamos el fd a epoll
                 if (epoll_add(agent_fd, EPOLLIN | EPOLLET, agent_id) == -1) {
-                    printf("\n");
                     printf("[handle_scheduler] error (epoll_add) estableciendo conexion con el agente %s:%s.\n", ip, port);
 
                     fd_table_undo_add(agent_fd);
@@ -631,10 +623,14 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
 
             // Mandamos "RESERVE <job_id> <res> <amount>"
             agent_info = fd_table_get_and_inc(agent_id);
-            len = sprintf(request, "RESERVE %s %s %s\n", job_id, res, amount);
             if (agent_info != NULL) {
-                if (send_msg(agent_id, agent_info, request, len) == -1)
+                printf("[handle_scheduler] mandando reserve a %d\n", agent_info->fd);
+                len = sprintf(request, "RESERVE %s %s %s\n", job_id, res, amount);
+                if (send_msg(agent_id, agent_info, request, len) == -1)  {
+                    printf("[handle_scheduler] error (send_msg)\n");
+
                     close_agent_conn(agent_id, agent_info);
+                }
                 fd_table_dec_and_release(agent_info);
             }
 
@@ -647,7 +643,6 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
             strncpy(reqs[nreqs].res, res, MAX_BYTES_NAME_RESOURCE - 1);
             reqs[nreqs].res[MAX_BYTES_NAME_RESOURCE - 1] = '\0';
             reqs[nreqs].amount = atoi(amount);
-            reqs[nreqs].granted = 0;
         }
     }
     if (nreqs != 0) {
