@@ -6,7 +6,7 @@
 #include "../consts.h"
 #include "hash.h"
 
-extern Hash *table_job;
+extern Hash *job_table;
 
 // Request de un recurso
 typedef struct {

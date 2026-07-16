@@ -22,14 +22,14 @@
 #include "structures/hash.h"
 #include "structures/fd_table.h"
 #include "structures/local_resources.h"
-#include "structures/table_agent.h"
-#include "structures/table_job.h"
-#include "structures/table_reservation.h"
+#include "structures/agent_table.h"
+#include "structures/job_table.h"
+#include "structures/reservation_table.h"
 #include "functions/functions.h"
 
-Hash *table_agent = NULL;
-Hash *table_job = NULL;
-Hash *table_reservation = NULL;
+Hash *agent_table = NULL;
+Hash *job_table = NULL;
+Hash *reservation_table = NULL;
 Resource* resources = NULL;
 int resource_count = 0;
 

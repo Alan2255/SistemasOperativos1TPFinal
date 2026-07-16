@@ -3,7 +3,7 @@
 
 #include <pthread.h>
 #include "../consts.h"
-#include "table_reservation.h"
+#include "reservation_table.h"
 
 // Cola de trabajos pendientes
 typedef struct {

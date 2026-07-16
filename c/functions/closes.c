@@ -1,11 +1,11 @@
 #include <stdlib.h>
 #include "../structures/fd_table.h"
-#include "../structures/table_agent.h"
-#include "../structures/table_job.h"
-#include "../structures/table_reservation.h"
+#include "../structures/agent_table.h"
+#include "../structures/job_table.h"
+#include "../structures/reservation_table.h"
 #include "functions.h"
 
-/* Cierra la conexion de un agente: limpia su id en table_agent, libera
+/* Cierra la conexion de un agente: limpia su id en agent_table, libera
 las reservas de recursos locales que se le concedieron o quedaron encoladas
 y pide el cierre del fd. */
 void close_agent_conn(uint64_t id, FdEntry *info) {
@@ -14,7 +14,7 @@ void close_agent_conn(uint64_t id, FdEntry *info) {
     fd_table_request_close(info);
 }
 
-/* Cierra la conexion del scheduler: libera todos los jobs de table_job
+/* Cierra la conexion del scheduler: libera todos los jobs de job_table
 (mandando "RELEASE" a cada agente que se le pidio), pide el cierre del fd y
 reinicia scheduler_id. */
 void close_scheduler_conn(FdEntry *info) {

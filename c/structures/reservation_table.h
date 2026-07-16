@@ -5,7 +5,7 @@
 #include "../consts.h"
 #include "hash.h"
 
-extern Hash *table_reservation;
+extern Hash *reservation_table;
 
 // Job reservado
 typedef struct {

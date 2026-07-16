@@ -9,7 +9,7 @@
 
 #define KEY_LEN (INET_ADDRSTRLEN + PORTSTRLEN + 2)
 
-extern Hash *table_agent;
+extern Hash *agent_table;
 
 // Agente
 typedef struct {

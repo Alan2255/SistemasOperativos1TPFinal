@@ -10,9 +10,9 @@
 #include <time.h>
 #include <arpa/inet.h>
 #include "../structures/fd_table.h"
-#include "../structures/table_agent.h"
-#include "../structures/table_job.h"
-#include "../structures/table_reservation.h"
+#include "../structures/agent_table.h"
+#include "../structures/job_table.h"
+#include "../structures/reservation_table.h"
 #include "../consts.h"
 #include "functions.h"
 #include <stdbool.h>
