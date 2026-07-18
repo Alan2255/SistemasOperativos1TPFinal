@@ -52,6 +52,33 @@ bucle_supervisor(JobTimeout, Pid_wait_jobs, Socket, Pid_scheduler_job) ->
             bucle_supervisor(JobTimeout, Pid_wait_jobs, Socket, Pid_scheduler_job)
     end.
 
+% Hace una llamada bloqueante y directa, aca es dueño el solo del socket porque todavia no existe tcp deliver asi que lee el socket bien.
+request_map_nodes_initial(Socket) -> 
+    gen_tcp:send(Socket, <<"GET_NODES">>),
+    case gen_tcp:recv(Socket, 0) of
+        {ok, Data} -> 
+            parser:binList_to_MapNodos(Data);
+        {error, Reason} -> 
+            exit({error_pidiendo_mapa_inicial, Reason})
+    end.
+
+% Convierte el mapa inicial {Host => [CPU,MEM,GPU]} en entradas atómicas por recurso,
+% más una lista con el orden de los nodos. 
+% EJ:            CLAVE          VALOR
+%           { {"Nodo1", 1}   ,   4}
+%           { {"Nodo1", 2}   ,   9}
+
+cargar_tabla_recursos(MapNodos) ->
+    ListNodos = maps:to_list(MapNodos),
+    lists:foreach(fun({Host, [Cpu, Mem, Gpu]}) ->
+        ets:insert(recursos_nodos, {{Host, 1}, Cpu}),
+        ets:insert(recursos_nodos, {{Host, 2}, Mem}),
+        ets:insert(recursos_nodos, {{Host, 3}, Gpu})
+    end, ListNodos),
+    OrdenNodos = [Host || {Host, _} <- ListNodos],
+    % Insertamos ahora en la tabla orden_nodos que es una lista con los nodos disponibles
+    ets:insert(recursos_nodos, {orden_nodos, OrdenNodos}).
+
 % Obtiene la lista de nodos activos, crea tabla de PENDIENTES, crea y LINKEA los procesos scheduler_job y wait_job 
 % Recibe: N(cantidad de jobs a crear), Puerto(int)
 % Retorna: ListMaximos(lista de 3 int, formada por la suma de la cantidad de ese recurso entre todos los nodos disponibles, donde el orden de las cantidades es CPU, MEM, GPU.)
@@ -59,8 +86,13 @@ inicializar_sistema(N, Puerto) ->
 
     % Nos conectamos al agente de C
     {ok, Socket} = tcp_connection:connect_agent(Puerto),
-
     ets:new(pendientes, [named_table, public, set]),
+    ets:new(recursos_nodos, [named_table, public, set]), 
+
+    % Pedimos el mapa de nodos DIRECTO por el socket, en modo síncrono,
+    % sin pasar por tcp_deliver (que todavía no existe).
+    MapNodos = request_map_nodes_initial(Socket),  
+    cargar_tabla_recursos(MapNodos),
 
     % (!) Registrar este pid
     Pid_wait_jobs = spawn_link(job_manager, wait_jobs, [N]),  
@@ -75,3 +107,4 @@ inicializar_sistema(N, Puerto) ->
     % Creamos el proceso tcp deliver
     spawn_link(tcp_connection, tcp_deliver, [Socket, JobTimeout]),
     Socket.
+

@@ -1,12 +1,101 @@
 -module(job_manager).
--export([handler_job/7, recibir_jobs_y_armar_peticiones/4, armar_peticiones/4, wait_jobs/1]).
+-export([handler_job/8, recibir_jobs_y_armar_peticiones/4, armar_peticiones/3, wait_jobs/1]).
 
 %=============================================== FUNCIONES SOBRE JOBS ===================================================
+indice_recurso("cpu") -> 1;
+indice_recurso("mem") -> 2;
+indice_recurso("gpu") -> 3.
+% El 2 en ets:update_counter significa modifica el 2ndo elemento de la tupla, basicamente q modifican el valor y no la clave
+% ets:update_counter siempre suma, si queremos restar le pasamos un num negativo 
+
+% Devuelve {Tomado, FaltaPedir} -> cuánto se tomó realmente, y cuánto queda pendiente.
+% Recibe la ip del nodo, el indice(cpu,mem o gpu) y la cantidad que debe tomar
+tomar_de_nodo(Host, Indice, Cantidad) ->
+    Key = {Host, Indice},
+    % Accede con la key al valor del recurso de ese nodo en la ets y resta la cantidad que desea tomar, la fun es atomica.
+    NuevoValor = ets:update_counter(recursos_nodos, Key, {2, -Cantidad}),
+    case NuevoValor >= 0 of
+        % Si el resultado queda >= 0: el nodo tenía suficiente, tomamos Cantidad completa.
+        true -> 
+            {Cantidad, 0};  % alcanzó completo, no queda nada pendiente
+
+        % Si el resultado queda < 0: el nodo no alcanzaba. Tomamos solo lo que tenía(el valor original), y reponemos el excedente que restamos de más para
+        % dejar el contador en 0 (nunca negativo).
+        false ->  
+            % Ej: Recurso = 3, Cantidad(pedida) = 5 -> NuevoValor = -2.
+            % Entonces lo que tomamos es 3, que es igual a Tomado = Cantidad + nuevoValor (Tomado = 5 + (-2)).
+            Tomado = Cantidad + NuevoValor,
+            % Repone el excedente para dejar el contador en 0 (no negativo).
+            ets:update_counter(recursos_nodos, Key, {2, -NuevoValor}),
+            % Retornamos cuanto se tomo realmente(para luego reponerlo) y cuanto falta pedir
+            {Tomado, Cantidad - Tomado}
+    end.
+
+% Devuelve una Cantidad a un nodo (usado al revertir por JOB_DENIED/timeout).
+devolver_a_nodo(Host, Indice, Cantidad) ->
+    % Accede a la cantidad con la key {Host, Indice} y repone la cantidad que habiamos tomado. 2 significa que modifica 2ndo elem de la tupla(la cant)
+    ets:update_counter(recursos_nodos, {Host, Indice}, {2, Cantidad}).
+
+% Reparte Cantidad de un recurso entre la lista de nodos (en orden), tomando de a uno
+% de forma atómica. El ultimo nodo de la lista recibe todo lo que quede pendiente,
+% se le acepte o no (si no alcanza, tomar_de_nodo queda en 0 y devuelve lo real tomado).
+% Devuelve {ListaPedidos, ListaDescuentosReales}:
+% ListaPedidos: [{Host, CantidadPedida}, ...] -> para armar el mensaje al agente C
+% ListaDescuentosReales: [{Host, Recurso, CantidadTomadaReal}, ...] -> para poder devolver despues
+
+repartir_entre_nodos(_Indice, 0, _Nodos, _Recurso) -> 
+    {[], []};
+
+% Restante es lo q falta pedir.
+repartir_entre_nodos(Indice, Restante, [Host], Recurso) ->
+    % Ultimo nodo: se le pide TODO el restante, alcance o no.
+    {Tomado, _Sobra} = tomar_de_nodo(Host, Indice, Restante),
+    % Usamos Restante no tomado, pq el ultimo nodo pide todo lo q falta aunque no alcance, luego C haga job denied
+    % La segunda lista si usa Tomado para poder ir teniendo en cuenta que reponer de la ets cuando recibamos job denied
+    {[{Host, Restante}], [{Host, Recurso, Tomado}]};
+
+repartir_entre_nodos(Indice, CantidadRestante, [Host | Resto], Recurso) -> 
+    {Tomado, Sobra} = tomar_de_nodo(Host, Indice, CantidadRestante),
+    case Tomado of
+        0 -> 
+            %% este nodo no tenía nada, seguimos con el resto sin agregarlo
+            repartir_entre_nodos(Indice, CantidadRestante, Resto, Recurso);
+        _ ->
+            {ListaResto, DescuentosResto} = repartir_entre_nodos(Indice, Sobra, Resto, Recurso),
+            % Va poniendo el resultado {Host, Tomado}  al principio de la lista que armaron los demas.
+            % Van retornando las llamadas recursivas y se va formando la lista.
+            {[{Host, Tomado} | ListaResto], [{Host, Recurso, Tomado} | DescuentosResto]}
+    end.
+
+% Reparte entre nodos no importa q no alcance luego ya seran denegados por C.
+elegir_nodos(Recurso, Cantidad) -> 
+    % Busca la lista con los nodos disponibles y su orden para saber cuando llega al ultimo nodo.
+    [{orden_nodos, Nodos}] = ets:lookup(recursos_nodos, orden_nodos),
+    Indice = indice_recurso(Recurso),
+    repartir_entre_nodos(Indice, Cantidad, Nodos, Recurso).
+
+% Descuentos es la lista de los descuentos que aplicamos a cada recurso
+% Descuentos : [{Host, Recurso, CantidadTomadaReal}, ...]
+handler_job(JobID, Job, CantRecursos, JobTimeout, Socket, Msg_REQUEST, Msg_RELEASE, Descuentos) ->
+    ets:insert(pendientes, {JobID, Job, self(), Descuentos}), %Para evitar race cond insertamos primero y luego mandamos el msg
+    gen_tcp:send(Socket, list_to_binary(Msg_REQUEST)),
+    procesar_respuesta(JobID, Job, CantRecursos, Socket, Msg_RELEASE, JobTimeout, Descuentos).
+
+% Devuelve a cada nodo lo que realmente se le habia tomado, de forma atomica.
+% Recibe la lista con los descuentos aplicados 
+revertir_descuentos(Descuentos) ->
+    lists:foreach(fun({Host, Recurso, Cantidad}) ->
+        Indice = indice_recurso(Recurso),
+        devolver_a_nodo(Host, Indice, Cantidad)
+    end,
+     %lista sobre la que se aplica a cada elemento la funcion anonima fun.
+     Descuentos
+    ).
 
 %Recibe la respuesta de la peticion del job enviado y maneja que hacer en cada caso, cuando termina un job, lo elimina de la tabla de Pendientes, registra su log y envia -
 %- msg a wait_jobs avisando que termino.
 % Recibe: JobID(string), Job(string), CantRecursos(int), Socket(int), Msg_Release(string), JobTimeuot(int en milisegundos), Pid_wait_jobs(Pid).
-procesar_respuesta(JobID, Job, _CantRecursos, Socket, Msg_RELEASE, JobTimeout) ->
+procesar_respuesta(JobID, Job, _CantRecursos, Socket, Msg_RELEASE, JobTimeout, Descuentos) ->
     receive 
         {tcp_msg, Bin} -> 
             case binary_to_list(Bin) of
@@ -16,20 +105,27 @@ procesar_respuesta(JobID, Job, _CantRecursos, Socket, Msg_RELEASE, JobTimeout) -
                     timer:sleep(2000),
                     io:format("Trabajo finalizado!.~n"),
                     gen_tcp:send(Socket, list_to_binary(Msg_RELEASE)),
+                    %Devolvemos lo que habiamos descontado
+                    revertir_descuentos(Descuentos),
                     pid_scheduler_job ! {job_terminado, JobID};
                     %Pid_wait_jobs ! {ok, Socket};
 
                 "JOB_DENIED " ++ _Rest -> 
+                    %Devolvemos lo que habiamos descontado
+                    revertir_descuentos(Descuentos),
                     borrarPendiente_and_registrarLog(JobID, Job, "JOB_DENIED"),
                     pid_scheduler_job ! {job_terminado, JobID};
                     %Pid_wait_jobs ! {ok, Socket};
                 
                 Invalido ->
                     io:format("Formato de mensaje no esperado por el handler: ~p~n", [Invalido]),
+                    %Devolvemos lo que habiamos descontado
+                    revertir_descuentos(Descuentos),
                     pid_scheduler_job ! {job_terminado, JobID}
                     %Pid_wait_jobs ! {ok, Socket}
             end
     after JobTimeout -> 
+        revertir_descuentos(Descuentos),
         borrarPendiente_and_registrarLog(JobID, Job, "POSIBLE DEADLOCK"),
         gen_tcp:send(Socket, list_to_binary(Msg_RELEASE)),
         pid_scheduler_job ! {job_terminado, JobID}
@@ -37,12 +133,6 @@ procesar_respuesta(JobID, Job, _CantRecursos, Socket, Msg_RELEASE, JobTimeout) -
         % pid_scheduler_job ! {JobID, Job, CantRecursos}
     end.
 
-% Retorna: Lista de tuplas de la forma [{Nodo1, CantidadTomada}, {Nodo2, CantidadTomada2}, etc] si pudo repartir el recurso        
-%manda el msg al agente espera su respuesta y la maneja
-handler_job(JobID, Job, CantRecursos, JobTimeout, Socket, Msg_REQUEST, Msg_RELEASE) ->
-    ets:insert(pendientes, {JobID, Job, self()}), %Para evitar race cond insertamos primero y luego mandamos el msg
-    gen_tcp:send(Socket, list_to_binary(Msg_REQUEST)),
-    procesar_respuesta(JobID, Job, CantRecursos, Socket, Msg_RELEASE, JobTimeout).
 
 % Cada vez q recibe un job arma la peticion y crea un proceso (conectado al mismo agente) para q mande y espere la rta del job
 % se llama recursivamente para seguir atendiendo jobs
@@ -57,169 +147,56 @@ recibir_jobs_y_armar_peticiones(Socket, JobTimeout, Pid_wait_jobs, JobsActivos) 
 
          {JobID, Job, CantRecursos} -> 
             io:format("[scheduler] Procesando Job ~s (~s) ~n", [JobID, Job]),
-            
-            % Solicitamos los nodos de forma asíncrona a C
-            tcp_connection:send_map_nodes_request(Socket),
-            
-            % Saltamos a un estado de espera específico para capturar la respuesta de tcp_deliver
-           esperar_mapa_nodos(Socket, JobTimeout, Pid_wait_jobs, JobsActivos, JobID, Job, CantRecursos)
+
+            {Msg_REQUEST, Msg_RELEASE, Descuentos} = armar_peticiones(JobID, Job, CantRecursos),
+            spawn(job_manager, handler_job, [JobID, Job, CantRecursos, JobTimeout, Socket, Msg_REQUEST, Msg_RELEASE, Descuentos]),
+            recibir_jobs_y_armar_peticiones(Socket, JobTimeout, Pid_wait_jobs, JobsActivos + 1)
     end.
 
-%Esperar mapa nodos
-esperar_mapa_nodos(Socket, JobTimeout, Pid_wait_jobs, JobsActivos, JobID, Job, CantRecursos) ->
-    receive
-        {tcp_nodes, BinList} -> 
-            MapNodos = binList_to_MapNodos(BinList),
+% Arma el string de pedido para un recurso, y devuelve también los descuentos reales aplicados.
 
-            case armar_peticiones(JobID, Job, CantRecursos, MapNodos) of
-                {error, no_alcanza} -> 
-                    %Pid_wait_jobs ! {ok, Socket},
-                    recibir_jobs_y_armar_peticiones(Socket, JobTimeout, Pid_wait_jobs, JobsActivos);
+armar_msg(Recurso, Cant) -> 
+    % Lista de nodos con la cantidad del recurso pedido ej:[{"Nodo1",4},{"Nodo2",1}] y listDescuentos lista de descuentos aplicados
+    {ListNodoCantidad, ListDescuentos} = elegir_nodos(Recurso, list_to_integer(Cant)),
+    % A cada elem de la lista le aplica ese manejo de strings para construir el pedido de cada recurso a cada nodo, lo guarda como lista.
+    ListPedidoPorNodo = [Nodo ++ ":" ++ Recurso ++ ":" ++ integer_to_list(Cantidad) || {Nodo, Cantidad} <- ListNodoCantidad],    
+    % Une todos los elementos de la lista usando un espacio ej : ["Nodo1:cpu:4", "Nodo2:cpu:1"] -> "Nodo1:cpu:4 Nodo2:cpu:1"
+    % Retorna eso y la lista con los descuentos aplicados.
+    {string:join(ListPedidoPorNodo, " "), ListDescuentos}.
 
-                {Msg_REQUEST, Msg_RELEASE} -> 
-                    spawn(job_manager, handler_job, [JobID, Job, CantRecursos, JobTimeout, Socket, Msg_REQUEST, Msg_RELEASE]),
-                    recibir_jobs_y_armar_peticiones(Socket, JobTimeout, Pid_wait_jobs, JobsActivos + 1) % +1 JobActivo       
-            end;
-
-        % (?) Esto debería estar acá? 
-        {job_terminado, _IDTerminado} ->
-            esperar_mapa_nodos(Socket, JobTimeout, Pid_wait_jobs, JobsActivos - 1, JobID, Job, CantRecursos)
-
-    after JobTimeout -> 
-        io:format("[scheduler] Error: Timeout esperando nodos del tcp_deliver para el Job ~s~n", [JobID]),
-        %Pid_wait_jobs ! {ok, Socket},
-        recibir_jobs_y_armar_peticiones(Socket, JobTimeout, Pid_wait_jobs, JobsActivos)
-    end.
-
-
-%Repartir entre nodos
-repartir_entre_nodos(_Indice, 0, _Nodos) -> [];
-
-repartir_entre_nodos(_Indice, _CantidadRestante, []) ->
-    {error, no_alcanza};
-
-repartir_entre_nodos(Indice, CantidadRestante, [{Host, Recursos} | Resto]) -> 
-    Disponible = lists:nth(Indice, Recursos), 
-    case Disponible of
-        0 -> 
-            repartir_entre_nodos(Indice, CantidadRestante, Resto);
-        _ -> 
-            Tomar = min(Disponible, CantidadRestante),
-            % Evaluamos primero qué devuelve la llamada recursiva
-            case repartir_entre_nodos(Indice, CantidadRestante - Tomar, Resto) of
-                {error, no_alcanza} -> 
-                    % Si en el fondo de la lista no alcanzó, propagamos el error directo hacia arriba
-                    {error, no_alcanza};
-                ResultadoExitoso -> 
-                    % Si alcanzó (devolvió una lista), acoplamos el nodo actual a la cabeza
-                    [{Host, Tomar} | ResultadoExitoso]
-            end
-    end.
-
-%En el case busca en el mapa de nodos el primer nodo q tenga suficiente recurso segun el tipo de recurso pedido y su cant requerida
-%%Devuelve una lista con los nodos a los cuales pedir y cuanto le pide a cada uno
-%Si encuentra en 1 devuelve {value, {Nodo, Recursos}, retornamos Nodo y Cantidad y sino tiene q buscar entre mas nodos para completar
-% Recibe: %Recurso(string), Cantidad(int), MapNodos(map)
-% Retorna: {error, no_alcanza} si no alcanzaron los nodos para la cantidad que requerias
-% Retorna: Lista de tuplas de la forma [{Nodo1, CantidadTomada}, {Nodo2, CantidadTomada2}, etc]
-elegir_nodos(Recurso, Cantidad, MapNodos) -> 
-    Nodos = maps:to_list(MapNodos), 
-    Indice = case Recurso of 
-        "cpu" -> 1;
-        "mem" -> 2;
-        "gpu" -> 3
-    end,
-    case lists:search(fun({_Host, Recursos}) -> 
-        lists:nth(Indice, Recursos) >= Cantidad
-    end, Nodos) of  
-        {value, {Nodo, _}} -> 
-            [{Nodo, Cantidad}]; 
-
-        false -> 
-            repartir_entre_nodos(Indice, Cantidad, Nodos)
-    end.
-    
-%Funcion que devuelve el msg armado con el job de cuanto recurso le pedis a cada nodo, luego solo faltaria agregarle la peticion y el JobID.
-% Recibe: Recurso(string), Cant(string), MapNodos(map)
-% Retorna {error, no_alcanza} si no alcanzaron los nodos para la cantidad que requerias
-% Retorna string Ej: "@Nodo:Recurso:Cant @Nodo:Recurso:Cant"
-armar_msg(Recurso, Cant, MapNodos) -> 
-    case elegir_nodos(Recurso, list_to_integer(Cant), MapNodos) of 
-        {error, no_alcanza} -> 
-            {error, no_alcanza};
-
-        ListNodoCantidad -> %devuelve la lista de tuplas [{Nodo1, CantidadTomada}, {Nodo2, CantidadTomada2} 
-            ListPedidoPorNodo = [Nodo ++ ":" ++ Recurso ++ ":" ++ integer_to_list(Cantidad) || {Nodo, Cantidad} <- ListNodoCantidad ],%A cada elem de la lista, le aplica eso
-            %Devuelve una lista con ["@Nodo:Recurso:Cant", "@Nodo:Recurso:Cant", etc]
-            string:join(ListPedidoPorNodo, " ")%retorna un string donde separa cada elem de la lista con un " ", EJ: @Nodo:Recurso:Cant @Nodo:Recurso:Cant etc
-    end.
-
-% Crea el msg final de JOB_REQUEST 
-% Recibe: JobID(string), Job(string),CantRecursos(int) MapNodos(mapa)
-% Retorna: {error, no alcanza} en caso que no alcance la cantidad de nodos
-% Retorna: Msg_final(string)
-handler_msgs(JobID, Job, CantRecursos, MapNodos) -> %JobID(string), Job(string),CantRecursos(int) MapNodos(mapa)
+% Retornamos tambien Descuento en cada job armado para luego saber que devolver.
+handler_msgs(JobID, Job, CantRecursos) ->
+    % EJ : "cpu:10:mem:20" -> ["cpu","10","mem","20"]
     List_recursos = string:tokens(Job, ":"),
     case CantRecursos of 
         1 ->
             [Recurso1, Cant1] = List_recursos,
-            case armar_msg(Recurso1, Cant1, MapNodos) of 
-                {error, no_alcanza} ->  %Primero evaluamos el error, pq sino Msg al ser variable matchea cualquier cosa que llegue
-                    {error, no_alcanza};
-                Msg -> %Msg es un string por ej: "@Nodo:Recurso:Cant @Nodo:Recurso:Cant" etc. 
-                    Msg_final = "JOB_REQUEST" ++ " " ++ JobID ++ " " ++ Msg,
-                    Msg_final
-            end;
+            {Msg, Descuentos1} = armar_msg(Recurso1, Cant1),
+            {"JOB_REQUEST" ++ " " ++ JobID ++ " " ++ Msg, Descuentos1};
 
         2 ->
             [Recurso1, Cant1, Recurso2, Cant2] = List_recursos,
-            case armar_msg(Recurso1, Cant1, MapNodos) of
-                {error, no_alcanza} -> 
-                    {error, no_alcanza};
-                Msg1 -> 
-                    case armar_msg(Recurso2, Cant2, MapNodos) of
-                        {error, no_alcanza} -> 
-                            {error, no_alcanza};
-                        Msg2 ->
-                            Msg_final = "JOB_REQUEST" ++ " " ++ JobID ++ " " ++ Msg1 ++ " " ++ Msg2,
-                            Msg_final
-                    end
-            end;
+            {Msg1, Descuentos1} = armar_msg(Recurso1, Cant1),
+            {Msg2, Descuentos2} = armar_msg(Recurso2, Cant2),
+            {"JOB_REQUEST" ++ " " ++ JobID ++ " " ++ Msg1 ++ " " ++ Msg2, Descuentos1 ++ Descuentos2};
 
         3 ->
             [Recurso1, Cant1, Recurso2, Cant2, Recurso3, Cant3] = List_recursos,
-            case armar_msg(Recurso1, Cant1, MapNodos) of
-                {error, no_alcanza} -> 
-                    {error, no_alcanza};
-                Msg1 ->
-                    case armar_msg(Recurso2, Cant2, MapNodos) of
-                        {error, no_alcanza} -> 
-                            {error, no_alcanza};
-                        Msg2 ->
-                            case armar_msg(Recurso3, Cant3, MapNodos) of
-                                {error, no_alcanza} -> 
-                                    {error, no_alcanza};
-                                Msg3 ->
-                                    Msg_final = "JOB_REQUEST" ++ " " ++ JobID ++ " " ++ Msg1 ++ " " ++ Msg2 ++ " " ++ Msg3,
-                                    Msg_final
-                            end
-                    end
-            end
+            {Msg1, Descuentos1} = armar_msg(Recurso1, Cant1),
+            {Msg2, Descuentos2} = armar_msg(Recurso2, Cant2),
+            {Msg3, Descuentos3} = armar_msg(Recurso3, Cant3),
+            {"JOB_REQUEST" ++ " " ++ JobID ++ " " ++ Msg1 ++ " " ++ Msg2 ++ " " ++ Msg3, Descuentos1 ++ Descuentos2 ++ Descuentos3}
     end.
 
-%Arma las peticiones que enviara al agente C.
-% Recibe: JobID(string), Job(string), CantRecursos(int), MapNodos(mapa)
-% Retorna {error, no alcanza} si la cantidad del recurso no se puede repartir entre ninguna cantidad de nodos disponibles
-% Retorna {Msg_REQUEST(string), Msg_RELEASE(string} si la cantidad del recurso SI se pudo repartir entre la cantidad de los nodos disponibles
-armar_peticiones(JobID, Job, CantRecursos, MapNodos) -> %%JobID(string), Job(string), CantRecursos(int), MapNodos(map)
-    case handler_msgs(JobID, Job, CantRecursos, MapNodos) of %Devuelve el msg completo para enviar si puede y sino error.
-        {error, no_alcanza} ->
-            {error, no_alcanza};
-         Msg_REQUEST ->
-            Msg_RELEASE = "JOB_RELEASE" ++ " " ++ JobID, %Liberar recurso
-            {Msg_REQUEST, Msg_RELEASE}
-    end.
+% Ahora devuelve una TERNA {request, release, MapNodos actualizado}
+armar_peticiones(JobID, Job, CantRecursos) ->
+    %% _MapNodos ya no se usa (queda el parámetro para no romper la firma /4 exportada,
+    %% pero ahora se lee todo directo de ETS). Si preferís, se puede sacar el parámetro.
+    {Msg_REQUEST, Descuentos} = handler_msgs(JobID, Job, CantRecursos),
+    Msg_RELEASE = "JOB_RELEASE" ++ " " ++ JobID,
+    {Msg_REQUEST, Msg_RELEASE, Descuentos}.
 
+%=============================================== WAIT / LOGS ===================================================
 wait_jobs(0) ->
     io:format("[scheduler] Todos los jobs finalizaron.~n"),
     cliente_pid ! fin,
@@ -230,12 +207,6 @@ wait_jobs(JobsActivos) ->
         {job_terminado, _JobID} ->
             wait_jobs(JobsActivos - 1)
     end.
-
-binList_to_MapNodos(BinList) ->
-    ListStr = binary_to_list(BinList),
-    ListSinPrefijo = parser:remover_prefijo_nodes(ListStr),
-    List_nodos_separados = string:split(ListSinPrefijo, ";", all),
-    parser:parsear_lista_nodos(List_nodos_separados).
 
 % Si no existe el archivo lo crea y sino escribe al final
 % Funcion que registra en un archivo log la fecha, hora, JobID , Job y respuesta del agente.

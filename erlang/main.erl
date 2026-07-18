@@ -76,7 +76,7 @@ manual_loop(Socket) -> %Asi deberia quedar el string a mandar a C  JOB_REQUEST 1
                 Msg_REQUEST = "JOB_REQUEST" ++ " " ++ JobID ++ " " ++ Job,
                 Msg_RELEASE = "JOB_RELEASE" ++ " " ++ JobID,
                 %Pasamos 0 en CantRecusos pq no importan y ademas procesar_respuesta los ignora. 
-                spawn(job_manager, handler_job, [JobID, Job, 0, 3000, Socket, Msg_REQUEST, Msg_RELEASE]), %Manda el msg al agente espera su rta y la maneja
+                spawn(job_manager, handler_job, [JobID, Job, 0, 3000, Socket, Msg_REQUEST, Msg_RELEASE, []]), %Manda el msg al agente espera su rta y la maneja
                 manual_loop(Socket);
         %Terminara cuando el usuario mande cliente_pid ! fin o cuando ya generaste N jobs q le pasaste como parametro
         fin ->  ok 

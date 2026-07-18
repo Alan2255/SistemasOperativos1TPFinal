@@ -1,5 +1,5 @@
 -module(parser).
--export([eliminar_indice/2, parsear_lista_nodos/1, remover_prefijo_nodes/1]).
+-export([eliminar_indice/2, parsear_lista_nodos/1, remover_prefijo_nodes/1, binList_to_MapNodos/1]).
 
 %=============================================== FUNCIONES DE PARSEO ===================================================
 
@@ -34,3 +34,8 @@ remover_prefijo_nodes(String) ->
      String.
 
 
+binList_to_MapNodos(BinList) ->
+    ListStr = binary_to_list(BinList),
+    ListSinPrefijo = remover_prefijo_nodes(ListStr),
+    List_nodos_separados = string:split(ListSinPrefijo, ";", all),
+    parsear_lista_nodos(List_nodos_separados).
