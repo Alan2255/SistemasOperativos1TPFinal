@@ -20,6 +20,11 @@ int get_port_and_resources(int argc, char **argv, int *num_resources, char **res
     }
 
     *num_resources = atoi(argv[2]);
+    if ( MAX_RESOURCES_AGENT < *num_resources) {
+        printf("Error: la maxima cantidad de recursos (n) es %d.\n", MAX_RESOURCES_AGENT);
+        return -1;
+    }
+
     if (argc != 3 + (*num_resources * 2)) {
         printf("Error: cantidad incorrecta de argumentos \n");
         printf("Uso: <port> <n> <name_1> ... <name_n> <amount_1> ... <amount_n>\n");

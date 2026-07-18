@@ -689,6 +689,9 @@ void release_job(job_table_t *job) {
 
 /* Procesa "JOB_RELEASE <job_id>". */
 static void job_release(char* job_id) {
+    if (!job_id) {
+        return;
+    }
     job_table_t *job = job_table_extract(atoi(job_id));
     release_job(job);
     free(job);
