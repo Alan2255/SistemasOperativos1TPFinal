@@ -195,7 +195,7 @@ void handle_listen_scheduler(FdEntry* info) {
     }
     scheduler_id = new_id;
 
-    printf("[handle_listen_scheduler] se conecto el scheduler con el id %016" PRIx64 "\n", scheduler_id);
+    printf("[handle_listen_scheduler] se conecto el scheduler y se le asigno el id 0x%016" PRIx64 ".\n", scheduler_id);
 
 }
 
@@ -224,7 +224,7 @@ void handle_agent_connect(FdEntry* info) {
             return;
         }
 
-        printf("[handle_agent_connect] aceptamos un agente con el id 0x%016" PRIx64 "\n", agent_id);
+        printf("[handle_agent_connect] se acepto un agente y se le asigno el id 0x%016" PRIx64 ".\n", agent_id);
         
     }
 }
@@ -296,15 +296,14 @@ void handle_announce(FdEntry* info) {
             strcpy(((fd_node_timer_data *)(timer_entry->data))->ip, ip);
             strcpy(((fd_node_timer_data *)(timer_entry->data))->port, port);
 
-            printf("[handle_announce] nuevo agente %s:%s res_count=%d ",
+            printf("[handle_announce] nuevo agente '%s:%s ",
                 ((fd_node_timer_data *)(timer_entry->data))->ip,
-                ((fd_node_timer_data *)(timer_entry->data))->port,
-                res_count);
+                ((fd_node_timer_data *)(timer_entry->data))->port);
             printf("%s:%d", resources[0].name, resources[0].available);
             for (int i = 1; i < res_count; i++) {
-                printf(", %s:%d", resources[i].name, resources[i].available);
+                printf(" %s:%d", resources[i].name, resources[i].available);
             }
-            printf(".\n");
+            printf("'.\n");
 
             fd_table_dec_and_release(timer_entry);
         }
@@ -330,6 +329,7 @@ static int send_job_denied(char* job_id_str, int has_reference, FdEntry *schedul
         }
     }
 
+    printf("[send_job_denied] mandando '%x%x%s' al scheduler.\n", *((char*)reply), *((char*)(reply+1)), reply + 2);
     if (send_msg(scheduler_id, scheduler_entry, reply, NBYTES_PACKET_ERL + len) == -1) {
         close_scheduler_conn(scheduler_entry);
     }
@@ -349,13 +349,14 @@ static void reserve(uint64_t id, FdEntry *info, char *job_id_str, char *res, cha
     int job_id = atoi(job_id_str);
     int amount = atoi(amount_str);
 
-    printf("[handle_agent] procesando 'RESERVE %d %s %d'\n", job_id, res, amount);
 
     char reply[TAM_BUF];
     int len;
     switch (local_resources_reserve(job_id, info->fd, res, amount)) {
         case -1: // No se pudo conceder
             len = sprintf(reply, "DENIED %d\n", job_id);
+
+            printf("[handle_agent] mandando 'DENIED %d\\n' por el socket 0x%x.\n", job_id, info->fd);
             if (send_msg(id, info, reply, len) == -1)
                 close_agent_conn(id, info);
             break;
@@ -365,12 +366,14 @@ static void reserve(uint64_t id, FdEntry *info, char *job_id_str, char *res, cha
         case 0: // Se concedio
             reservation_table_add(job_id, info->fd, res, amount, 1);
             len = sprintf(reply, "GRANTED %d\n", job_id);
+
+            printf("[handle_agent] mandando 'GRANTED %d\\n' por el socket 0x%x.\n", job_id, info->fd);
             if (send_msg(id, info, reply, len) == -1)
                 close_agent_conn(id, info);
 
-            char buff[TAM_BUF];
-            local_resources_to_str(buff);
-            printf("[handle_agent] local_resources=%s\n", buff);
+            // char buff[TAM_BUF];
+            // local_resources_to_str(buff);
+            // printf("[handle_agent] local_resources=%s\n", buff);
 
             break;
     }
@@ -382,12 +385,10 @@ static void granted(char *job_id_str) {
         return;
 
     int job_id = atoi(job_id_str);
-    printf("[handle_agent] procesando 'GRANTED %d'\n", job_id);
 
     job_table_inc_ngranted(job_id);
 
     if (job_table_check_granted(job_id)) {
-        printf("[handle_agent] mandando ");
 
         char reply[TAM_BUF];
         unsigned short len = sprintf(reply + NBYTES_PACKET_ERL, "JOB_GRANTED %d", job_id);
@@ -396,12 +397,12 @@ static void granted(char *job_id_str) {
 
         FdEntry *scheduler_entry = fd_table_get_and_inc(scheduler_id);
         if (scheduler_entry != NULL) {
+            printf("[handle_agent] mandando '%x%x%s' al scheduler.\n", *((char*)reply), *((char*)(reply+1)), reply + 2);
             if (send_msg(scheduler_id, scheduler_entry, reply, NBYTES_PACKET_ERL + len) == -1)
                 close_scheduler_conn(scheduler_entry);
             fd_table_dec_and_release(scheduler_entry);
         }
 
-        printf("len = 0x%x, %s.\n", *((unsigned char*)reply + 1), reply + 2);
     }
 }
 
@@ -413,13 +414,11 @@ static void release(FdEntry *info, char *job_id_str, char *res, char *amount_str
     int job_id = atoi(job_id_str);
     int amount = atoi(amount_str);
 
-    printf("[handle_agent] procesando 'RELEASE %d %s %d'\n", job_id, res, amount);
-
     local_resources_release(job_id, info->fd, res, amount);
 
-    char buff[TAM_BUF];
-    local_resources_to_str(buff);
-    printf("[handle_agent] local_resources=%s\n", buff);
+    // char buff[TAM_BUF];
+    // local_resources_to_str(buff);
+    // printf("[handle_agent] local_resources=%s\n", buff);
 
     reservation_table_release(job_id, info->fd, res);
 }
@@ -450,7 +449,7 @@ void handle_agent(uint64_t id, FdEntry* info) {
             break;
         }
         if (n == -1 || n == 0) {
-            printf("handle_agent: agent closed connection or an error occurred.\n");
+            printf("[handle_agent] agent closed connection or an error occurred.\n");
             pthread_mutex_unlock(&data->mutex_in);
             close_agent_conn(id, info);
             return;
@@ -458,7 +457,6 @@ void handle_agent(uint64_t id, FdEntry* info) {
 
         data->len_buf_in += n;
         data->buf_in[data->len_buf_in] = '\0';
-        // printf("Buffer crudo recibido: [%s]\n", data->buf_in);
 
         char* read_ptr = data->buf_in;
 
@@ -472,6 +470,7 @@ void handle_agent(uint64_t id, FdEntry* info) {
             // Obtenemos el comando completo, reemplazando el '\n' por '\0' 
             *end_of_command = '\0';
             char *command = read_ptr;
+            printf("[handle_agent] procesando %s.\n", command);
 
             char *space = " ";
             char *saveptr1;
@@ -514,7 +513,6 @@ void handle_agent(uint64_t id, FdEntry* info) {
             memmove(data->buf_in, read_ptr, data->len_buf_in - bytes_procesados);
             data->len_buf_in -= bytes_procesados;
             data->buf_in[data->len_buf_in] = '\0';
-            printf("Mensaje incompleto remanente. Nuevo len_buf_in = %d, buf_in=%s.\n", data->len_buf_in, data->buf_in);
         }
     }
 
@@ -530,8 +528,6 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
     if (!info || !job_id || !reqs_str)
         return;
         
-    printf("[handle_scheduler] procesando JOB_REQUEST %s\n", job_id);
-    
     job_req_t reqs[MAX_JOB_RQ];
     int nreqs = 0;
     
@@ -553,8 +549,6 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
         char *res = strtok_r(NULL, colon, &saveptr2);
         char *amount = strtok_r(NULL, colon, &saveptr2);
 
-        printf("[handle_scheduler] procesando %s:%s:%s:%s\n", ip, port, res, amount);
-
         uint64_t agent_id;
         if (agent_table_get_id(ip, port, &agent_id) <= 0) { 
             // El agente no esta en la tabla de nodos
@@ -573,7 +567,7 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
                 // Creamos el socket
                 int agent_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
                 if (agent_fd == -1) {
-                    printf("[handle_scheduler] error (socket) estableciendo conexion con el agente %s:%s. \n", ip, port);
+                    printf("[handle_scheduler] error (socket) creando el socket para el agente %s:%s.\n", ip, port);
 
                     send_job_denied(job_id, 1, info);
                     nreqs = 0;
@@ -585,9 +579,9 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
                 addr.sin_family = AF_INET;
                 inet_pton(AF_INET, ip, &addr.sin_addr);
                 addr.sin_port = htons(atoi(port));
-                printf("[handle_scheduler] conectando el socket %d a %s:%s\n", agent_fd, ip, port);
+                printf("[handle_scheduler] conectando el socket 0x%x a la direccion %s:%s.\n", agent_fd, ip, port);
                 if (connect(agent_fd, (struct sockaddr*)&addr, sizeof(addr)) == -1 && errno != EINPROGRESS) {
-                    printf("[handle_scheduler] error (connect) estableciendo conexion con el agente %s:%s.\n", ip, port);
+                    printf("[handle_scheduler] error (connect) conectando con el agente %s:%s.\n", ip, port);
                     
                     close(agent_fd);
                     send_job_denied(job_id, 1, info);
@@ -598,7 +592,7 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
                 // Agregamos el fd a la tabla y obtenemos el id (fd+reuse)
                 agent_id = fd_table_add(agent_fd, FD_AGENT);
                 if (agent_id == UINT64_MAX) {
-                    printf("[handle_scheduler] error (fd_table_add) estableciendo conexion con el agente %s:%s.\n", ip, port);
+                    printf("[handle_scheduler] error (fd_table_add) agregando el socket del agente %s:%s a la fd_table.\n", ip, port);
                     
                     close(agent_fd);
                     send_job_denied(job_id, 1, info);
@@ -624,10 +618,10 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
             // Mandamos "RESERVE <job_id> <res> <amount>"
             agent_info = fd_table_get_and_inc(agent_id);
             if (agent_info != NULL) {
-                printf("[handle_scheduler] mandando reserve a %d\n", agent_info->fd);
+                printf("[handle_scheduler] mandando 'RESERVE %s %s %s\\n' por el socket 0x%x.\n",job_id, res, amount, agent_info->fd);
                 len = sprintf(request, "RESERVE %s %s %s\n", job_id, res, amount);
                 if (send_msg(agent_id, agent_info, request, len) == -1)  {
-                    printf("[handle_scheduler] error (send_msg)\n");
+                    printf("[handle_scheduler] error (send_msg).\n");
 
                     close_agent_conn(agent_id, agent_info);
                 }
@@ -646,7 +640,6 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
         }
     }
     if (nreqs != 0) {
-        printf("\n");
         job_table_add(atoi(job_id), nreqs, reqs);
     }
 }
@@ -666,6 +659,7 @@ void release_job(job_table_t *job) {
         }
         FdEntry *agent_info = fd_table_get_and_inc(agent_id);
         if (agent_info != NULL) {
+            printf("[release_job] mandando 'RELEASE %d %s %d\\n' por el socket 0x%x.\n", job->job_id, req.res, req.amount, agent_info->fd);
             if (send_msg(agent_id, agent_info, request, len) == -1)
                 close_agent_conn(agent_id, agent_info);
             fd_table_dec_and_release(agent_info);
@@ -675,7 +669,6 @@ void release_job(job_table_t *job) {
 
 /* Procesa "JOB_RELEASE <job_id>". */
 static void job_release(char* job_id) {
-    printf("[handle_scheduler] JOB_RELEASE %s.\n", job_id);
     job_table_t *job = job_table_extract(atoi(job_id));
     release_job(job);
     free(job);
@@ -684,8 +677,6 @@ static void job_release(char* job_id) {
 /* Procesa "GET_NODES" (manda al scheduler la lista de agentes
 con sus recursos). */
 static void get_nodes(uint64_t id, FdEntry *info) {
-    printf("[handle_scheduler] GET_NODES.\n");
-
     char reply[TAM_BUF];
     unsigned short len, nlen;
 
@@ -698,7 +689,8 @@ static void get_nodes(uint64_t id, FdEntry *info) {
     if (send_msg(id, info, reply, NBYTES_PACKET_ERL + len) == -1)
         close_scheduler_conn(info);
 
-    printf("[handle_scheduler] tabla mandada (%s).\n", buf);
+    printf("[handle_agent] mandando '%x%x%s' al scheduler.\n", *((char*)reply), *((char*)(reply+1)), reply + 2);
+
     free(buf);
 }
 
@@ -746,6 +738,7 @@ int handle_scheduler(uint64_t id, FdEntry *info) {
             char command[TAM_BUF];
             memcpy(command, read_ptr + NBYTES_PACKET_ERL, len_msg);
             command[len_msg] = '\0';
+            printf("[handle_scheduler] procesando %s.\n", command);
 
             char *space = " ";
             char *saveptr1;
