@@ -11,7 +11,7 @@ void send_announce() {
     local_resources_to_str(buf_resources);
     
     /* 1. CORRECCIÓN: snprintf evita desbordar buf si buf_resources es muy grande */
-    int bytes_written = snprintf(buf, sizeof(buf), "ANNOUNCE %d %s", puerto_tcp + 1, buf_resources);
+    int bytes_written = snprintf(buf, sizeof(buf), "ANNOUNCE %d %s", puerto_tcp, buf_resources);
     if (bytes_written >= (int)sizeof(buf)) {
         fprintf(stderr, "Advertencia: El anuncio fue truncado por falta de espacio en TAM_BUF\n");
     }

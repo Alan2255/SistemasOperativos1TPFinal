@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <sys/socket.h>
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
@@ -63,7 +64,7 @@ int init_udp_sock() {
 
 /* Inicia el socket de escucha para conexiones con otros agentes. */
 int init_agents_listen_sock() {
-    int sock = init_sock(SOCK_STREAM, INADDR_ANY, puerto_tcp+1, FD_AGENTS_LISTEN);
+    int sock = init_sock(SOCK_STREAM, INADDR_ANY, puerto_tcp, FD_AGENTS_LISTEN);
 
     // Lo ponemos en modo escucha para nuevas conexiones
     if (listen(sock, MAX_PENDING_CONNECTIONS) == -1)

@@ -10,7 +10,7 @@ las reservas de recursos locales que se le concedieron o quedaron encoladas
 y pide el cierre del fd. */
 void close_agent_conn(uint64_t id, FdEntry *info) {
     agent_table_clear_id(id);
-    reservation_table_release_by_socket(info->fd);
+    reservation_table_release_by_id(id);
     fd_table_request_close(info);
 }
 

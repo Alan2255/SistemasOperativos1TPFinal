@@ -352,7 +352,7 @@ static void reserve(uint64_t id, FdEntry *info, char *job_id_str, char *res, cha
 
     char reply[TAM_BUF];
     int len;
-    switch (local_resources_reserve(job_id, info->fd, res, amount)) {
+    switch (local_resources_reserve(job_id, id, res, amount)) {
         case -1: // No se pudo conceder
             len = sprintf(reply, "DENIED %d\n", job_id);
 
@@ -361,10 +361,10 @@ static void reserve(uint64_t id, FdEntry *info, char *job_id_str, char *res, cha
                 close_agent_conn(id, info);
             break;
         case 1: // Se encolo
-            reservation_table_add(job_id, info->fd, res, amount, 0);
+            reservation_table_add(job_id, id, res, amount, 0);
             break;
         case 0: // Se concedio
-            reservation_table_add(job_id, info->fd, res, amount, 1);
+            reservation_table_add(job_id, id, res, amount, 1);
             len = sprintf(reply, "GRANTED %d\n", job_id);
 
             printf("[handle_agent] mandando 'GRANTED %d\\n' por el socket 0x%x.\n", job_id, info->fd);
@@ -407,20 +407,38 @@ static void granted(char *job_id_str) {
 }
 
 /* Procesa "RELEASE <job_id> <res> <amount>" recibido de otro agente. */
-static void release(FdEntry *info, char *job_id_str, char *res, char *amount_str) {
+static void release(uint64_t id, char *job_id_str, char *res, char *amount_str) {
     if (job_id_str == NULL || res == NULL || amount_str == NULL)
         return;
 
     int job_id = atoi(job_id_str);
     int amount = atoi(amount_str);
 
-    local_resources_release(job_id, info->fd, res, amount);
+    pending_grant_t grants[MAX_RESERVATIONS];
+    int ngrants = 0;
+
+    local_resources_release(job_id, id, res, amount, grants, &ngrants);
 
     // char buff[TAM_BUF];
     // local_resources_to_str(buff);
     // printf("[handle_agent] local_resources=%s\n", buff);
 
-    reservation_table_release(job_id, info->fd, res);
+    reservation_table_release(job_id, id, res);
+
+    // Mandamos "GRANTED <job_id>" a los pedidos encolados que se concedieron.
+    for (int i = 0; i < ngrants; i++) {
+        char reply[TAM_BUF];
+        int len = sprintf(reply, "GRANTED %d\n", grants[i].job_id);
+
+        FdEntry *info = fd_table_get_and_inc(grants[i].src_id);
+        if (info) {
+
+            printf("[handle_agent] mandando 'GRANTED %d\\n' (encolado) por el socket 0x%x.\n", grants[i].job_id, info->fd);
+            if (send_msg(grants[i].src_id, info, reply, len) == -1)
+                close_agent_conn(grants[i].src_id, info);
+            fd_table_dec_and_release(info);
+        }
+    }
 }
 
 /* Procesa "DENIED <job_id>" recibido de otro agente. */
@@ -486,7 +504,7 @@ void handle_agent(uint64_t id, FdEntry* info) {
                 granted(job_id_str);
             }
             else if (command_name != NULL && strncmp(command_name, "RELEASE", strlen("RELEASE")) == 0) {
-                release(info, job_id_str, res, amount_str);
+                release(id, job_id_str, res, amount_str);
             }
             else if (command_name != NULL && strncmp(command_name, "DENIED", strlen("DENIED")) == 0) {
                 denied(job_id_str);
