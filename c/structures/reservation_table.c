@@ -17,24 +17,6 @@ void reservation_table_init(void) {
     }
 }
 
-// Destruye la tabla de reservas
-void reservation_table_shutdown(void) {
-    if (!reservation_table) return;
-
-    pthread_mutex_lock(&(reservation_table->mutex));
-
-    for (int i = 0; i < reservation_table->used; i++) {
-        if (reservation_table->entries[i].value != NULL) {
-            free(reservation_table->entries[i].value);
-            reservation_table->entries[i].value = NULL;
-        }
-    }
-
-    hash_destroy(reservation_table, free);
-
-    pthread_mutex_unlock(&(reservation_table->mutex));
-}
-
 reservation_t* make_reservation(int job_id, uint64_t src_id, const char* res_name, int amount, int granted) {
     reservation_t *new_reservation = malloc(sizeof(reservation_t));
     if (!new_reservation) {

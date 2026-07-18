@@ -29,9 +29,6 @@ typedef struct {
 // Crea la tabla de jobs
 void job_table_init(void);
 
-// Destruye la tabla de jobs
-void job_table_shutdown(void);
-
 // Agrega un job
 bool job_table_add(int job_id, int nreqs, const job_req_t *reqs);
 

@@ -22,9 +22,6 @@ typedef struct {
 // Crea la tabla de reservas
 void reservation_table_init(void);
 
-// Destruye la tabla de reservas
-void reservation_table_shutdown(void);
-
 // Agrega una reserva
 bool reservation_table_add(int job_id, uint64_t src_id, const char* res_name, int amount, int granted);
 

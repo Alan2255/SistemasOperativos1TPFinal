@@ -15,25 +15,6 @@ void job_table_init(void) {
     }
 }
 
-// Destruye la tabla de jobs
-void job_table_shutdown(void) {
-    if (!job_table) return;
-
-    pthread_mutex_lock(&(job_table->mutex));
-
-    for (int i = 0; i < job_table->used; i++) {
-        if (job_table->entries[i].value != NULL) {
-            free(job_table->entries[i].value);
-            job_table->entries[i].value = NULL;
-        }
-    }
-
-    hash_destroy(job_table, free);
-    job_table = NULL;
-
-    pthread_mutex_unlock(&(job_table->mutex));
-}
-
 job_table_t* make_job(int job_id, int nreqs, const job_req_t *reqs) {
     int cantidad_a_copiar = (nreqs > MAX_JOB_RQ) ? MAX_JOB_RQ : nreqs;
 
