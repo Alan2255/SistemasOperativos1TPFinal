@@ -20,18 +20,18 @@
 #include <inttypes.h>
 
 /* Separa el string en tokens y guarda una referencia a cada uno en 'tokens'. */
-static int tokenize_str(char *str, char *delim, int max_tokens, char **tokens) {
+static int tokenize_str(char *str, char *delim, int max_tokens, char **tokens, char **saveptr) {
     int i = 0;
 
     if (str == NULL || delim == NULL || tokens == NULL || max_tokens <= 0)
         return 0;
 
-    for (char *token = strtok(str, delim);
+    for (char *token = strtok_r(str, delim, saveptr);
          token != NULL && i < max_tokens;
          i++)
     {
         tokens[i] = token;
-        token = strtok(NULL, delim);
+        token = strtok_r(NULL, delim, saveptr);
     }
 
     return i;
@@ -41,7 +41,8 @@ static int tokenize_str(char *str, char *delim, int max_tokens, char **tokens) {
 y copia los datos en los parametros pasados. */
 static int parse_announce(char *msg, char *port, Resource *resources, int *res_count) {
     char* tokens[2 + MAX_RESOURCES_AGENT];
-    int count_tokens = tokenize_str(msg, " ", 2 + MAX_RESOURCES_AGENT, tokens);
+    char *saveptr1;
+    int count_tokens = tokenize_str(msg, " ", 2 + MAX_RESOURCES_AGENT, tokens, &saveptr1);
 
     // Parseamos el comando
     if (count_tokens <= 2 || strcmp(tokens[0], "ANNOUNCE") != 0) {
@@ -54,7 +55,8 @@ static int parse_announce(char *msg, char *port, Resource *resources, int *res_c
     *res_count = count_tokens - 2;
     for(int i = 0; i < *res_count; i++) {
         char* subtokens[2]; // <res>:<amount>
-        tokenize_str(tokens[2+i], ":", 2, subtokens);
+        char *saveptr2;
+        tokenize_str(tokens[2+i], ":", 2, subtokens, &saveptr2);
 
         // Copiamos el nombre del recurso usando snprintf
         snprintf(resources[i].name, MAX_BYTES_NAME_RESOURCE, "%s", subtokens[0]);

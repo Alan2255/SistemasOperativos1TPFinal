@@ -53,10 +53,13 @@ uint64_t fd_table_add(int fd, fdtype type) {
     char key[16];
     make_key(fd, key, sizeof(key));
 
+    // Llamamos a hash_get y hash_set con el lock tomado.
+    pthread_mutex_lock(&fd_table->mutex);
     FdEntry *entry = (FdEntry*)hash_get(fd_table, key, sizeof(FdEntry));
     if (!entry) {
         entry = malloc(sizeof(FdEntry));
         if (!entry) {
+            pthread_mutex_unlock(&fd_table->mutex);
             return UINT64_MAX;
         }
         entry->fd = -1;
@@ -66,6 +69,7 @@ uint64_t fd_table_add(int fd, fdtype type) {
 
         hash_set(fd_table, key, entry); // Se agrega en la tabla sin terminar de inicializar pero ningun thread accede porque el fd se agrega despues a epoll
     }
+    pthread_mutex_unlock(&fd_table->mutex);
 
     // Creamos el campo data
     void *data;
@@ -102,7 +106,6 @@ uint64_t fd_table_add(int fd, fdtype type) {
     entry->type = type;
     entry->data = data;
     uint64_t id = ((uint64_t)(uint32_t)fd << 32) | entry->reuse;
-    // printf("[fd_table_add] 0x%016" PRIx64 ", entry: fd=%d, reuse=%d, type=%d, data=%p\n", id, entry->fd, entry->reuse, entry->type, entry->data);
     pthread_mutex_unlock(&entry->mutex);
 
     return id;
@@ -118,7 +121,9 @@ void fd_table_undo_add(int fd) {
     char key[16];
     make_key(fd, key, sizeof(key));
 
+    pthread_mutex_lock(&fd_table->mutex);
     FdEntry *entry = (FdEntry*)hash_get(fd_table, key, sizeof(FdEntry));
+    pthread_mutex_unlock(&fd_table->mutex);
     if (!entry)
         return;
 
@@ -143,7 +148,9 @@ FdEntry* fd_table_get_and_inc(uint64_t id) {
     char key[16];
     make_key(fd, key, sizeof(key));
 
+    pthread_mutex_lock(&fd_table->mutex);
     FdEntry *entry = (FdEntry*)hash_get(fd_table, key, sizeof(FdEntry));
+    pthread_mutex_unlock(&fd_table->mutex);
     if (!entry) {
         return NULL;
     }
