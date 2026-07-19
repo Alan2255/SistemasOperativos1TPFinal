@@ -71,8 +71,8 @@ static int parse_announce(char *msg, char *port, Resource *resources, int *res_c
 static int add_to_buffer(FdEntry* info, char* msg, int len) {
     fd_tcp_data* data = info->data;
 
-    if (len < TAM_BUF - data->len_buf_out) {
-        printf("buf_out sin espacio.\n");
+    if (len > TAM_BUF - data->len_buf_out) {
+        printf("[add_to_buffer] buf_out sin espacio.\n");
         return -1;
     }
     else {
