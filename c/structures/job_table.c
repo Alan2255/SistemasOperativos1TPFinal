@@ -89,9 +89,10 @@ int job_table_check_granted(int job_id) {
         pthread_mutex_unlock(&(job_table->mutex));
         return -1;
     }
-
+    
+    bool cmp = job->nreqs == job->ngranted;
     pthread_mutex_unlock(&(job_table->mutex));
-    return job->nreqs == job->ngranted;
+    return cmp;
 }
 
 // Devuelve un string con la tabla de jobs para imprimir.
