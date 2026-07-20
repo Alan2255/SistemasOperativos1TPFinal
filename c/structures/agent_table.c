@@ -155,6 +155,7 @@ void agent_table_update(char* ip, char* port, Resource* resources, int count_res
     // Reemplazamos los recursos de la copia
     if (resources != NULL && count_resources > 0) {
         int a_copiar = (count_resources > MAX_RESOURCES_AGENT) ? MAX_RESOURCES_AGENT : count_resources;
+        agent->count_resources = a_copiar;
         
         for (int i = 0; i < a_copiar; i++) {
             strncpy(agent->resources[i].name, resources[i].name, MAX_BYTES_NAME_RESOURCE - 1);
