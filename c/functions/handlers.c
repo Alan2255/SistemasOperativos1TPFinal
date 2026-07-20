@@ -390,7 +390,7 @@ static void granted(char *job_id_str) {
 
     job_table_inc_ngranted(job_id);
 
-    if (job_table_check_granted(job_id)) {
+    if (job_table_check_granted(job_id) == 1) {
 
         char reply[TAM_BUF];
         unsigned short len = sprintf(reply + NBYTES_PACKET_ERL, "JOB_GRANTED %d", job_id);
@@ -448,9 +448,11 @@ static void denied(char *job_id_str) {
     if (!job_id_str)
         return;
 
-    send_job_denied(job_id_str, 0, NULL);
-
-    job_table_release(atoi(job_id_str));
+    job_table_t* job = job_table_extract(atoi(job_id_str));
+    if (job) {
+        send_job_denied(job_id_str, 0, NULL);
+        release_job(job);
+    }
 }
 
 /* Maneja la recepcion de un mensaje de un agente, acumula
@@ -556,26 +558,48 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
     
     FdEntry* agent_info;
     
-    // Gestionamos cada 'ip:port:res:amount'
     char *space = " ", *colon = ":";
     char *saveptr1, *saveptr2;
     char *token = strtok_r(reqs_str, space, &saveptr1);
-    for (; token != NULL && nreqs < MAX_JOB_RQ;
-         token = strtok_r(NULL, space, &saveptr1), nreqs++) {
+    int regret = 0;
 
+    // Parseamos el job_request
+    for (; token != NULL && nreqs < MAX_JOB_RQ; token = strtok_r(NULL, space, &saveptr1), nreqs++) {
         // Obtenemos cada campo
         char *ip = strtok_r(token, colon, &saveptr2);
         char *port = strtok_r(NULL, colon, &saveptr2);
         char *res = strtok_r(NULL, colon, &saveptr2);
         char *amount = strtok_r(NULL, colon, &saveptr2);
 
+        // Agregamos la request (ip:port:res:amount) al arreglo para
+        // luego agregarlo a la job_table 
+        strncpy(reqs[nreqs].dest_ip, ip, INET_ADDRSTRLEN - 1);
+        reqs[nreqs].dest_ip[INET_ADDRSTRLEN - 1] = '\0';
+        strncpy(reqs[nreqs].dest_port, port, PORTSTRLEN - 1);
+        reqs[nreqs].dest_port[PORTSTRLEN - 1] = '\0';
+        strncpy(reqs[nreqs].res, res, MAX_BYTES_NAME_RESOURCE - 1);
+        reqs[nreqs].res[MAX_BYTES_NAME_RESOURCE - 1] = '\0';
+        reqs[nreqs].amount = atoi(amount);
+    }
+
+    if (nreqs != 0) {
+        job_table_add(atoi(job_id), nreqs, reqs);
+    }
+
+    // Gestionamos cada 'ip:port:res:amount'
+    for (int i = 0; i < nreqs; i++) {
+        // Obtenemos cada campo
+        char *ip = reqs[i].dest_ip;
+        char *port = reqs[i].dest_port;
+        char *res = reqs[i].res;
+        int amount = reqs[i].amount;
+
         uint64_t agent_id;
         if (agent_table_get_id(ip, port, &agent_id) <= 0) { 
             // El agente no esta en la tabla de nodos
             printf("[handle_scheduler] No se encuentra el agente %s:%s.\n", ip, port);
 
-            send_job_denied(job_id, 1, info);
-            nreqs = 0;
+            regret = 1;
             break;
         }
         else {
@@ -589,8 +613,7 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
                 if (agent_fd == -1) {
                     printf("[handle_scheduler] error (socket) creando el socket para el agente %s:%s.\n", ip, port);
 
-                    send_job_denied(job_id, 1, info);
-                    nreqs = 0;
+                    regret = 1;
                     break;
                 }
 
@@ -604,8 +627,7 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
                     printf("[handle_scheduler] error (connect) conectando con el agente %s:%s.\n", ip, port);
                     
                     close(agent_fd);
-                    send_job_denied(job_id, 1, info);
-                    nreqs = 0;
+                    regret = 1;
                     break;
                 }
 
@@ -615,8 +637,7 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
                     printf("[handle_scheduler] error (fd_table_add) agregando el socket del agente %s:%s a la fd_table.\n", ip, port);
                     
                     close(agent_fd);
-                    send_job_denied(job_id, 1, info);
-                    nreqs = 0;
+                    regret = 1;
                     break;
                 }
 
@@ -626,8 +647,7 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
 
                     fd_table_undo_add(agent_fd);
                     close(agent_fd);
-                    send_job_denied(job_id, 1, info);
-                    nreqs = 0;
+                    regret = 1;
                     break;
                 }
 
@@ -638,8 +658,8 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
             // Mandamos "RESERVE <job_id> <res> <amount>"
             agent_info = fd_table_get_and_inc(agent_id);
             if (agent_info != NULL) {
-                printf("[handle_scheduler] mandando 'RESERVE %s %s %s\\n' por el socket 0x%x.\n",job_id, res, amount, agent_info->fd);
-                len = sprintf(request, "RESERVE %s %s %s\n", job_id, res, amount);
+                printf("[handle_scheduler] mandando 'RESERVE %s %s %d\\n' por el socket 0x%x.\n",job_id, res, amount, agent_info->fd);
+                len = sprintf(request, "RESERVE %s %s %d\n", job_id, res, amount);
                 if (send_msg(agent_id, agent_info, request, len) == -1)  {
                     printf("[handle_scheduler] error (send_msg).\n");
 
@@ -647,21 +667,15 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
                 }
                 fd_table_dec_and_release(agent_info);
             }
-
-            // Agregamos la request (ip:port:res:amount) al arreglo para
-            // luego agregarlo a la job_table 
-            strncpy(reqs[nreqs].dest_ip, ip, INET_ADDRSTRLEN - 1);
-            reqs[nreqs].dest_ip[INET_ADDRSTRLEN - 1] = '\0';
-            strncpy(reqs[nreqs].dest_port, port, PORTSTRLEN - 1);
-            reqs[nreqs].dest_port[PORTSTRLEN - 1] = '\0';
-            strncpy(reqs[nreqs].res, res, MAX_BYTES_NAME_RESOURCE - 1);
-            reqs[nreqs].res[MAX_BYTES_NAME_RESOURCE - 1] = '\0';
-            reqs[nreqs].amount = atoi(amount);
         }
     }
-    if (nreqs != 0) {
-        job_table_add(atoi(job_id), nreqs, reqs);
+
+    if (regret) {
+        send_job_denied(job_id, 1, info);
+        job_table_release(atoi(job_id));
+        nreqs = 0;
     }
+    
 }
 
 /* Manda "RELEASE ..." a cada agente de 'job'. */
