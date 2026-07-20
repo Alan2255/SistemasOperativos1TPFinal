@@ -1,5 +1,5 @@
 -module(main).
--export([server/3, client/3, scheduler_jobs/3]).
+-export([server/3, client/3, scheduler_jobs/2]).
 %nodos = host 
                  
 %Una vez llega a 0, termina.
@@ -57,9 +57,9 @@ generate_jobs(N) ->
 
 % Recibe por mensaje JobID(int), Job(string), CantRecursos(int) y crea SIN LINK un proceso que maneje este job, se vuelve a llamar recursivamente para seguir atendiendo jobs
 % handler_job es creado sin link ya que si muere o le pasa algo a ese job no nos importa queremos seguir atendiendo los proximos.
-% Recibe : JobTimeout(int), Pid_wait_jobs(Pid), Puerto(int)
-scheduler_jobs(JobTimeout, Pid_wait_jobs, Socket)->
-    job_manager:recibir_jobs_y_armar_peticiones(Socket, JobTimeout, Pid_wait_jobs, 0).
+% Recibe : JobTimeout(int), Puerto(int)
+scheduler_jobs(JobTimeout, Socket)->
+    job_manager:recibir_jobs_y_armar_peticiones(Socket, JobTimeout, 0).
 
 %Crea y linkea el proceso client
 % Recibe: Modo(atomo), N(int), Puerto(int) 
@@ -84,22 +84,26 @@ manual_loop(Socket) -> %Asi deberia quedar el string a mandar a C  JOB_REQUEST 1
         ets:delete(pendientes).%liberamos la tabla d procesos pendientes pq ya terminamos   
 
 
-%Inicializa el sistema y manda a generar los N jobs y espera a q terminen
+% ===================================== MODO MANUAL =================================================
+% N sigue siendo un argumento obligatorio de server/3/client/3 (porque la firma es fija para los dos modos), 
+% pero en modo manual no se usa para nada, así que podés pasar cualquier valor, típicamente 0.
+
+% Inicializa el sistema y manda a generar los N jobs y espera a q terminen
 % Recibe: Modo(atomo), N(int), Puerto(int) 
 client(Modo, N, Puerto) ->
     
-    Socket = system_init:inicializar_sistema(N, Puerto), %Inicializar sistema, y retorna una list de 3 int con los valores maximos d cada recurso
+    Socket = system_init:inicializar_sistema(Puerto), %Inicializar sistema, retorna el socket
     
     case Modo of
         random ->
-            generate_jobs(N), %generara N jobs q se los enviara a scheduler de jobs
+            generate_jobs(N), % Generara N jobs q se los enviara a scheduler de jobs
             receive 
-                fin ->  ok%Cuando terminan todos los jobs se manda solo el msg fin avisando al cliente y ahora si puede finalizar.
+                fin ->  ok % Cuando terminan todos los jobs se manda solo el msg fin avisando al cliente y ahora si puede finalizar.
             end,
-            ets:delete(pendientes);%liberamos la tabla d procesos pendientes pq ya terminamos
+            ets:delete(pendientes);% Liberamos la tabla d procesos pendientes pq ya terminamos
 
         manual ->
-            manual_loop(Socket); %Mismo socket que usa tcp_deliver
+            manual_loop(Socket); %M ismo socket que usa tcp_deliver
 
         _ -> 
             io:format("Los modos son: manual o random~n"),

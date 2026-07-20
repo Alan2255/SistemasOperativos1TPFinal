@@ -1,5 +1,5 @@
 -module(job_manager).
--export([handler_job/8, recibir_jobs_y_armar_peticiones/4, armar_peticiones/3, wait_jobs/1]).
+-export([handler_job/8, recibir_jobs_y_armar_peticiones/3, armar_peticiones/3, wait_jobs/1]).
 
 %=============================================== FUNCIONES SOBRE JOBS ===================================================
 indice_recurso("cpu") -> 1;
@@ -137,20 +137,20 @@ procesar_respuesta(JobID, Job, _CantRecursos, Socket, Msg_RELEASE, JobTimeout, D
 % Cada vez q recibe un job arma la peticion y crea un proceso (conectado al mismo agente) para q mande y espere la rta del job
 % se llama recursivamente para seguir atendiendo jobs
 % Eliminamos MapNodos de los argumentos iniciales
-recibir_jobs_y_armar_peticiones(Socket, JobTimeout, Pid_wait_jobs, JobsActivos) ->
+recibir_jobs_y_armar_peticiones(Socket, JobTimeout, JobsActivos) ->
     receive
          no_hay_mas_jobs -> 
             wait_jobs(JobsActivos);
 
          {job_terminado, _JobID} ->
-            recibir_jobs_y_armar_peticiones(Socket, JobTimeout, Pid_wait_jobs, JobsActivos - 1);
+            recibir_jobs_y_armar_peticiones(Socket, JobTimeout, JobsActivos - 1);
 
          {JobID, Job, CantRecursos} -> 
             io:format("[scheduler] Procesando Job ~s (~s) ~n", [JobID, Job]),
 
             {Msg_REQUEST, Msg_RELEASE, Descuentos} = armar_peticiones(JobID, Job, CantRecursos),
             spawn(job_manager, handler_job, [JobID, Job, CantRecursos, JobTimeout, Socket, Msg_REQUEST, Msg_RELEASE, Descuentos]),
-            recibir_jobs_y_armar_peticiones(Socket, JobTimeout, Pid_wait_jobs, JobsActivos + 1)
+            recibir_jobs_y_armar_peticiones(Socket, JobTimeout, JobsActivos + 1)
     end.
 
 % Arma el string de pedido para un recurso, y devuelve también los descuentos reales aplicados.
