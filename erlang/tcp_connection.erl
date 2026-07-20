@@ -7,7 +7,7 @@
 % Recibe: Puerto(int)
 % Retorna: {ok, Socket} si pudo conectar, si falla, termina el proceso con exit({error_al_conectar, Reason}).
 connect_agent(Puerto) ->
-    case  gen_tcp:connect("localhost", Puerto, [binary, {packet, 2}, {active, false}]) of %envio para conectarme al puerto 8100, si es exitosa devuelve ok socket
+    case  gen_tcp:connect("localhost", Puerto, [binary, {packet, 2}, {active, false}]) of % envio para conectarme al puerto, si es exitosa devuelve ok socket.
         {ok, Socket} -> {ok, Socket};
         {error, Reason} -> exit({error_al_conectar, Reason})
     end.

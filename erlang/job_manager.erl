@@ -17,7 +17,7 @@ indice_recurso("gpu") -> 3.
 % FaltaPedir: cuánto quedó sin poder tomarse (0 si alcanzó completo, un valor positivo si no alcanzó).
 tomar_de_nodo(Host, Indice, Cantidad) ->
     Key = {Host, Indice},
-    % Accede con la key al valor del recurso de ese nodo en la ets y resta la cantidad que desea tomar, la fun es atomica.
+    % Accede con la key al valor del recurso de ese nodo en la ets y resta la cantidad que desea tomar, la fun es atómica.
     NuevoValor = ets:update_counter(recursos_nodos, Key, {2, -Cantidad}),
     case NuevoValor >= 0 of
         % Si el resultado queda >= 0: el nodo tenía suficiente, tomamos Cantidad completa.
@@ -109,7 +109,7 @@ handler_job(JobID, Job, CantRecursos, JobTimeout, Socket, Msg_REQUEST, Msg_RELEA
     gen_tcp:send(Socket, list_to_binary(Msg_REQUEST)),
     procesar_respuesta(JobID, Job, CantRecursos, Socket, Msg_RELEASE, JobTimeout, Descuentos).
 
-% Devuelve a cada nodo lo que realmente se le habia tomado, de forma atómica.
+% Devuelve a cada nodo lo que realmente se le había tomado, de forma atómica.
 % Recibe: Descuentos(List de tuplas).
 revertir_descuentos(Descuentos) ->
     lists:foreach(fun({Host, Recurso, Cantidad}) ->
@@ -133,13 +133,13 @@ procesar_respuesta(JobID, Job, _CantRecursos, Socket, Msg_RELEASE, JobTimeout, D
                     timer:sleep(2000),
                     io:format("Trabajo finalizado!.~n"),
                     gen_tcp:send(Socket, list_to_binary(Msg_RELEASE)),
-                    %Devolvemos lo que habiamos descontado
+                    % Devolvemos lo que habíamos descontado
                     revertir_descuentos(Descuentos),
                     pid_scheduler_job ! {job_terminado, JobID};
                    
 
                 "JOB_DENIED " ++ _Rest -> 
-                    %Devolvemos lo que habiamos descontado
+                    %Devolvemos lo que habíamos descontado
                     revertir_descuentos(Descuentos),
                     borrarPendiente_and_registrarLog(JobID, Job, "JOB_DENIED"),
                     pid_scheduler_job ! {job_terminado, JobID};
@@ -147,7 +147,7 @@ procesar_respuesta(JobID, Job, _CantRecursos, Socket, Msg_RELEASE, JobTimeout, D
                 
                 Invalido ->
                     io:format("Formato de mensaje no esperado por el handler: ~p~n", [Invalido]),
-                    %Devolvemos lo que habiamos descontado
+                    %Devolvemos lo que habíamos descontado
                     revertir_descuentos(Descuentos),
                     pid_scheduler_job ! {job_terminado, JobID}
                 
