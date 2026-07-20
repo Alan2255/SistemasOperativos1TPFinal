@@ -1,14 +1,18 @@
 -module(main).
 -export([server/3, client/3, scheduler_jobs/2]).
 %nodos = host 
-                 
-%Una vez llega a 0, termina.
+
+
+% Genera N jobs con recursos aleatorios (1, 2 o 3 tipos de recurso, cantidades random),
+% mandándoselos uno por uno a pid_scheduler_job. Se llama a sí misma recursivamente
+% hasta agotar N, y al llegar a 0 avisa que no hay más jobs por generar.
+
+% Recibe: N(int, cuántos jobs quedan por generar)
+% No retorna nada relevante: envia mensajes {JobID, Job, CantRecursos} o no_hay_mas_jobs al final) al proceso 
+% registrado como pid_scheduler_job.
 generate_jobs(0) -> % cuando N es 0, termina
         pid_scheduler_job ! no_hay_mas_jobs;
 
-% Arma el job con el jobID y la cantidd de recursos q requerira, a que nodo se lo pedira lo manejara el scheduler
-% Envia por mensaje JobID(int), Job(string), CantRecursos(int) al proceso scheduler_job
-% Recibe: N(int), ListMaximos(lista de 3 enteros)
 generate_jobs(N) -> 
     JobID_int = erlang:unique_integer([positive]), %genera un entero unico en toda la instancia actual del sistema(maq virtual BEAM)
     JobID = integer_to_list(JobID_int),
@@ -55,18 +59,24 @@ generate_jobs(N) ->
     io:format("[job_generator] ~p ~p ~p ~n",[JobID, Job, Eleccion_recursos]),
     generate_jobs(N-1).%Ya generamos un job restamos el N de cantidad a generar y llamamos de nuevo a la funcion.
 
-% Recibe por mensaje JobID(int), Job(string), CantRecursos(int) y crea SIN LINK un proceso que maneje este job, se vuelve a llamar recursivamente para seguir atendiendo jobs
-% handler_job es creado sin link ya que si muere o le pasa algo a ese job no nos importa queremos seguir atendiendo los proximos.
-% Recibe : JobTimeout(int), Puerto(int)
+% Punto de entrada del proceso scheduler: arranca el contador de jobs activos en 0 y llama a job_manager:recibir_jobs_y_armar_peticiones, 
+% que es el loop real que corre durante toda la vida del sistema. Existe como función separada para que 
+% supervisor_scheduler_jobs pueda spawnear el proceso con spawn_link
+% Recibe: JobTimeout(int, milisegundos), Socket
 scheduler_jobs(JobTimeout, Socket)->
     job_manager:recibir_jobs_y_armar_peticiones(Socket, JobTimeout, 0).
 
-%Crea y linkea el proceso client
-% Recibe: Modo(atomo), N(int), Puerto(int) 
+% Crea y linkea el proceso client, y lo registra como cliente_pid para que
+% otros procesos puedan mandarle mensajes por nombre.
+% Recibe: Modo(atomo: random|manual), N(int, cantidad de jobs en modo random), Puerto(int).
 server(Modo, N, Puerto) ->
     Pid_client = spawn_link(?MODULE, client, [Modo, N, Puerto]), %Si el client muere el server se entera
     register(cliente_pid, Pid_client).
 
+% Espera que el usuario mande jobs armados a mano desde la consola, uno por uno, 
+% spawneando un handler_job por cada uno. 
+% Termina al recibir 'fin', momento en el que limpia las tablas ETS usadas durante la ejecución.
+% Recibe: Socket
 manual_loop(Socket) -> %Asi deberia quedar el string a mandar a C  JOB_REQUEST 1001 192.168.1.2:cpu:2 192.168.1.3:gpu:1
     receive     
         %Desde consola envias el JOB entero por ej: {"192.168.1.2:cpu:2 192.168.1.3:gpu:1"}.
@@ -78,18 +88,23 @@ manual_loop(Socket) -> %Asi deberia quedar el string a mandar a C  JOB_REQUEST 1
                 %Pasamos 0 en CantRecusos pq no importan y ademas procesar_respuesta los ignora. 
                 spawn(job_manager, handler_job, [JobID, Job, 0, 3000, Socket, Msg_REQUEST, Msg_RELEASE, []]), %Manda el msg al agente espera su rta y la maneja
                 manual_loop(Socket);
-        %Terminara cuando el usuario mande cliente_pid ! fin o cuando ya generaste N jobs q le pasaste como parametro
+        % Terminará cuando el usuario mande cliente_pid ! fin.
         fin ->  ok 
     end,
-        ets:delete(pendientes).%liberamos la tabla d procesos pendientes pq ya terminamos   
-
+        ets:delete(pendientes),%liberamos la tabla d procesos pendientes pq ya terminamos   
+        ets:delete(recursos_nodos).
 
 % ===================================== MODO MANUAL =================================================
 % N sigue siendo un argumento obligatorio de server/3/client/3 (porque la firma es fija para los dos modos), 
-% pero en modo manual no se usa para nada, así que podés pasar cualquier valor, típicamente 0.
+% pero en modo manual no se usa para nada, así que se puede pasar cualquier valor, típicamente 0.
 
-% Inicializa el sistema y manda a generar los N jobs y espera a q terminen
-% Recibe: Modo(atomo), N(int), Puerto(int) 
+
+% Inicializa el sistema completo y según el Modo, arranca la generación automática
+% de N jobs (random) o el loop de carga manual (manual). Al terminar, limpia las
+% tablas ETS usadas durante la ejecución.
+
+% Recibe: Modo(atomo: random|manual), N(int, cantidad de jobs en modo random), Puerto(int).
+% Corre hasta que la ejecución completa termine (fin en modo random, o 'fin' recibido en manual_loop en modo manual).
 client(Modo, N, Puerto) ->
     
     Socket = system_init:inicializar_sistema(Puerto), %Inicializar sistema, retorna el socket
@@ -100,10 +115,11 @@ client(Modo, N, Puerto) ->
             receive 
                 fin ->  ok % Cuando terminan todos los jobs se manda solo el msg fin avisando al cliente y ahora si puede finalizar.
             end,
-            ets:delete(pendientes);% Liberamos la tabla d procesos pendientes pq ya terminamos
+            ets:delete(pendientes),% Liberamos la tabla d procesos pendientes.
+            ets:delete(recursos_nodos); %Liberamos la tabla de recursos_nodos.
 
         manual ->
-            manual_loop(Socket); %M ismo socket que usa tcp_deliver
+            manual_loop(Socket); % Mismo socket que usa tcp_deliver
 
         _ -> 
             io:format("Los modos son: manual o random~n"),

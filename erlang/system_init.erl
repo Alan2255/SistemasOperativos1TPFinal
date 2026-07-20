@@ -5,8 +5,9 @@
 %MapNodos : mapa donde key es el nodo y value lista con 3 enteros, donde cada entero representa en orden la cantidad de CPU, MEM, GPU
 
 % Crea el proceso scheduler_jobs, si este muere captura el error y se encarga de volver a levantarlo.
-% Recibe: JobTimeout(int en milisegundos), Puerto(int)
-% No retorna nada, vive siempre mientras el sistema este corriendo
+
+% Recibe: JobTimeout(int en milisegundos), Socket, Pid_caller(int, quien inicializó el sistema y espera la confirmación)
+% No retorna nada, vive siempre mientras el sistema este corriendo.
 supervisor_scheduler_jobs(JobTimeout, Socket, Pid_caller) ->
     process_flag(trap_exit, true),
     
@@ -20,7 +21,12 @@ supervisor_scheduler_jobs(JobTimeout, Socket, Pid_caller) ->
     % Saltamos al bucle de escucha perpetuo pasándole el PID del scheduler actual
     bucle_supervisor(JobTimeout, Socket, Pid_scheduler_job).
 
+% Loop sin fin que espera señales de salida ('EXIT') del proceso scheduler_job.
+% Distingue terminación normal (corta en paz) de un crash (revive el proceso con
+% un nuevo Pid), e ignora EXIT de cualquier otro proceso que no sea el scheduler actual.
 
+% Recibe: JobTimeout(int), Socket, Pid_scheduler_job(Pid del scheduler que se está supervisando)
+% No retorna nada relevante: corre indefinidamente (o hasta terminación normal del scheduler).
 bucle_supervisor(JobTimeout, Socket, Pid_scheduler_job) ->
     receive 
         {'EXIT', Pid_scheduler_job, normal} ->
@@ -46,13 +52,16 @@ bucle_supervisor(JobTimeout, Socket, Pid_scheduler_job) ->
 
         {'EXIT', _OtroPid, _Reason} ->
             % Se cayó otra cosa (por ejemplo el padre o wait_jobs)
-            % io:format("[supervisor] (~p). Ignorando.~n", [Reason]),
-            
             % Seguimos escuchando con el mismo PID de scheduler de antes
             bucle_supervisor(JobTimeout, Socket, Pid_scheduler_job)
     end.
 
-% Hace una llamada bloqueante y directa, aca es dueño el solo del socket porque todavia no existe tcp deliver asi que lee el socket bien.
+% Pide el mapa de nodos al agente C de forma SÍNCRONA y bloqueante, leyendo el socket directamente (sin pasar por tcp_deliver,
+% que todavía no existe en este  punto del arranque). Se usa una única vez, al inicio del sistema.
+
+% Recibe: Socket
+% Retorna: MapNodos (map de Host => [CantCPU, CantMEM, CantGPU]).
+% Si falla la conexión, termina el proceso con exit({error_pidiendo_mapa_inicial, Reason}).
 request_map_nodes_initial(Socket) -> 
     gen_tcp:send(Socket, <<"GET_NODES">>),
     case gen_tcp:recv(Socket, 0) of
@@ -63,11 +72,13 @@ request_map_nodes_initial(Socket) ->
     end.
 
 % Convierte el mapa inicial {Host => [CPU,MEM,GPU]} en entradas atómicas por recurso,
-% más una lista con el orden de los nodos. 
+% más una lista con el orden de los nodos, y las inserta en la tabla ETS 'recursos_nodos'.
+% Esto permite después usar ets:update_counter de forma atómica al repartir jobs.
 % EJ:            CLAVE          VALOR
 %           { {"Nodo1", 1}   ,   4}
 %           { {"Nodo1", 2}   ,   9}
 
+% Recibe: MapNodos (map de Host => [CantCPU, CantMEM, CantGPU])
 cargar_tabla_recursos(MapNodos) ->
     ListNodos = maps:to_list(MapNodos),
     lists:foreach(fun({Host, [Cpu, Mem, Gpu]}) ->
@@ -79,9 +90,12 @@ cargar_tabla_recursos(MapNodos) ->
     % Insertamos ahora en la tabla orden_nodos que es una lista con los nodos disponibles
     ets:insert(recursos_nodos, {orden_nodos, OrdenNodos}).
 
-% Obtiene la lista de nodos activos, crea tabla de PENDIENTES, crea y LINKEA los procesos scheduler_job y wait_job 
-% Recibe: N(cantidad de jobs a crear), Puerto(int)
-% Retorna: ListMaximos(lista de 3 int, formada por la suma de la cantidad de ese recurso entre todos los nodos disponibles, donde el orden de las cantidades es CPU, MEM, GPU.)
+% Arranca todo el sistema: conecta con el agente C, crea las tablas ETS ('pendientes' para jobs en curso, 
+% 'recursos_nodos' para el estado de los nodos), pide el mapa de nodos inicial y lo carga en ETS,
+% levanta el supervisor del scheduler (esperando su confirmación antes de seguir), y finalmente arranca
+% tcp_deliver para empezar a escuchar respuestas del agente en tiempo de ejecución.
+% Recibe: Puerto(int)
+% Retorna: Socket (para que quien llamó pueda usarlo, ej: manual_loop en modo manual)
 inicializar_sistema(Puerto) -> 
 
     % Nos conectamos al agente de C

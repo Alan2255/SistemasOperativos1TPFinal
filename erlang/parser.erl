@@ -12,18 +12,16 @@ eliminar_indice(N, Lista) ->
     {Izq, [_ | Der]} = lists:split(N - 1, Lista), 
     Izq ++ Der.  
     
-% string:toekns ":" , devuelve una lista con cda elem del nodo, ej [host, puerto, cpu, cntcpu, mem, cntmem, 
-% Recibe: Nodo(string)
-% Retorna: Una tupla de la forma {Host, [CantCPU, CantMem, CantGPU}
-
+% string:tokens ":" , devuelve una lista con cda elem del nodo, ej [host, puerto, cpu, cntcpu, mem, cntmem, 
+% Recibe: Nodo(string) -> ej: "192.168.1.2:8100:cpu:4:mem:8:gpu:2"
+% Retorna: Una tupla {Host(string), Recursos(lista de 3 int)} -> ej: {"192.168.1.2:8100", [4,8,2]}
 parsear_un_nodo(Nodo) ->%Nodo(string)
     [Host, Puerto, "cpu", CantCPU, "mem", CantMEM, "gpu", CantGPU] = string:tokens(Nodo, ":"),
     {Host ++ ":" ++ Puerto, [list_to_integer(CantCPU), list_to_integer(CantMEM), list_to_integer(CantGPU)]}.    
 
-%A cada nodo que es un string lo transforma en una tupla de la forma {Host, [CantCPU, CantMem, CantGPU}, de esta forma arma una lista con list comprehension
-% y finalmente transforma la lista en un mapa
-% Recibe: ListNodos(lista de strings)
-% Retorna: Un mapa de la forma {Nodo1 => [cantCPU, cantMEM, cantGPU], Nodo2 => [cantCPU, cantMEM, cantGPU], etc}
+% Remueve el prefijo "NODES " si está presente en el string (si no está, devuelve el string sin cambios).
+% Recibe: String(string) -> ej: "NODES 192.168.1.2:8100:cpu:4;..."
+% Retorna: String(string) sin el prefijo -> ej: "192.168.1.2:8100:cpu:4;..."
 parsear_lista_nodos(ListNodos) -> %ListNodos(list de strings)
     maps:from_list([parsear_un_nodo(Nodo) || Nodo <- ListNodos]).
 
@@ -33,7 +31,9 @@ remover_prefijo_nodes("NODES " ++ Resto) ->
 remover_prefijo_nodes(String) ->
      String.
 
-
+% Toma el binario crudo que llega del agente C con la lista de nodos, y devuelve directamente el mapa final listo para usar.
+% Recibe: BinList(binary) -> ej: <<"NODES 192.168.1.2:8100:cpu:4:mem:8:gpu:2;192.168.1.3:8100:cpu:1:mem:2:gpu:0">>
+% Retorna: Un mapa {Host => [CantCPU, CantMEM, CantGPU], ...}
 binList_to_MapNodos(BinList) ->
     ListStr = binary_to_list(BinList),
     ListSinPrefijo = remover_prefijo_nodes(ListStr),
