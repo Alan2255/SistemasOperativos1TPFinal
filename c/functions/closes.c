@@ -13,6 +13,7 @@ void close_agent_conn(uint64_t id, FdEntry *info) {
     agent_table_clear_id(id);
     reservation_table_release_by_id(id);
     fd_table_request_close(info);
+    printf("[--] Conexion con agente cerrada [C - C]\n");
 }
 
 /* Cierra la conexion del scheduler: libera todos los jobs de job_table
@@ -29,6 +30,6 @@ void close_scheduler_conn(FdEntry *info) {
     }
 
     fd_table_request_close(info);
-    printf("Conexion con cliente cerrada\n");
+    printf("[--] Conexion con cliente cerrada [C - Erlang]\n");
     scheduler_id = UINT64_MAX;
 }

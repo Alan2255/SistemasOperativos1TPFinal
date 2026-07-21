@@ -49,7 +49,7 @@ tcp_deliver(Socket, JobTimeout) ->
             tcp_deliver(Socket, JobTimeout);
         % El agente C cerró la conexión TCP
         {error, closed} -> 
-            io:format("Conexion con el servidor cerrada~n");
+            io:format("[--] Conexion con el servidor cerrada~n");
         % Ocurrió algún otro error en la comunicación.
         {error, Reason} -> 
             io:format("[tcp_deliver] Error: ~p~n", [Reason])
