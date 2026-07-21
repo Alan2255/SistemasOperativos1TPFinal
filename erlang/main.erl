@@ -1,5 +1,5 @@
 -module(main).
--export([server/3, client/3, scheduler_jobs/2]).
+-export([server/5, client/5, scheduler_jobs/3]).
 %nodos = host 
 
 
@@ -62,15 +62,15 @@ generate_jobs(N) ->
 % Punto de entrada del proceso scheduler: arranca el contador de jobs activos en 0 y llama a job_manager:recibir_jobs_y_armar_peticiones, 
 % que es el loop real que corre durante toda la vida del sistema. Existe como función separada para que 
 % supervisor_scheduler_jobs pueda spawnear el proceso con spawn_link
-% Recibe: JobTimeout(int, milisegundos), Socket
-scheduler_jobs(JobTimeout, Socket)->
-    job_manager:recibir_jobs_y_armar_peticiones(Socket, JobTimeout, 0).
+% Recibe: JobTimeout(int, miliseg), Socket, TimeJob(int).
+scheduler_jobs(JobTimeout, Socket, TimeJob)->
+    job_manager:recibir_jobs_y_armar_peticiones(Socket, JobTimeout, 0, TimeJob).
 
 % Crea y linkea el proceso client, y lo registra como cliente_pid para que
 % otros procesos puedan mandarle mensajes por nombre.
-% Recibe: Modo(atomo: random|manual), N(int, cantidad de jobs en modo random), Puerto(int).
-server(Modo, N, Puerto) ->
-    Pid_client = spawn_link(?MODULE, client, [Modo, N, Puerto]), %Si el client muere el server se entera
+% Recibe: Modo(atomo: random|manual), N(int, cantidad de jobs en modo random), Puerto(int), TimeJob(int, en segundos), JobTimeout(int, en segundos).
+server(Modo, N, Puerto, TimeJob, JobTimeoutInit) ->
+    Pid_client = spawn_link(?MODULE, client, [Modo, N, Puerto, TimeJob, JobTimeoutInit]), %Si el client muere el server se entera
     register(cliente_pid, Pid_client).
 
 % Espera que el usuario mande jobs armados a mano desde la consola, uno por uno, 
@@ -103,11 +103,11 @@ manual_loop(Socket) -> %Asi deberia quedar el string a mandar a C  JOB_REQUEST 1
 % de N jobs (random) o el loop de carga manual (manual). Al terminar, limpia las
 % tablas ETS usadas durante la ejecución.
 
-% Recibe: Modo(atomo: random|manual), N(int, cantidad de jobs en modo random), Puerto(int).
+% Recibe: Modo(atomo: random|manual), N(int, cantidad de jobs en modo random), Puerto(int), TimeJob(int), JobTimeoutInit(int).
 % Corre hasta que la ejecución completa termine (fin en modo random, o 'fin' recibido en manual_loop en modo manual).
-client(Modo, N, Puerto) ->
+client(Modo, N, Puerto, TimeJob, JobTimeoutInit) ->
     
-    Socket = system_init:inicializar_sistema(Puerto), %Inicializar sistema, retorna el socket
+    Socket = system_init:inicializar_sistema(Puerto, TimeJob, JobTimeoutInit), %Inicializar sistema, retorna el socket
     
     case Modo of
         random ->

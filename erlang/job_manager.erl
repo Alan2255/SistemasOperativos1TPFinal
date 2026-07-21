@@ -1,5 +1,5 @@
 -module(job_manager).
--export([handler_job/8, recibir_jobs_y_armar_peticiones/3, armar_peticiones/3, wait_jobs/1]).
+-export([handler_job/9, recibir_jobs_y_armar_peticiones/4, armar_peticiones/3, wait_jobs/1]).
 
 %=============================================== FUNCIONES SOBRE JOBS ===================================================
 indice_recurso("cpu") -> 1;
@@ -102,12 +102,12 @@ elegir_nodos(Recurso, Cantidad) ->
 % Se spawnea SIN LINK: si este proceso muere, no afecta al resto del sistema ya que cada job es independiente.
 
 % Descuentos es la lista de los descuentos que aplicamos a cada recurso ej: [{Host, Recurso, CantidadTomadaReal}, ...]
-% Recibe: JobID(string), Job(string), CantRecursos(int), Socket, Msg_Release(string), JobTimeuot(int en milisegundos).
-% Msg_REQUEST(string), Msg_RELEASE(string), Descuentos(List de tuplas).
-handler_job(JobID, Job, CantRecursos, JobTimeout, Socket, Msg_REQUEST, Msg_RELEASE, Descuentos) ->
+% Recibe: JobID(string), Job(string), CantRecursos(int), JobTimeout(int), Socket,
+% Msg_REQUEST(string), Msg_RELEASE(string), Descuentos(List de tuplas),TimeJob(int).
+handler_job(JobID, Job, CantRecursos, JobTimeout, Socket, Msg_REQUEST, Msg_RELEASE, Descuentos, TimeJob) ->
     ets:insert(pendientes, {JobID, Job, self(), Descuentos}), %Para evitar race cond insertamos primero y luego mandamos el msg
     gen_tcp:send(Socket, list_to_binary(Msg_REQUEST)),
-    procesar_respuesta(JobID, Job, CantRecursos, Socket, Msg_RELEASE, JobTimeout, Descuentos).
+    procesar_respuesta(JobID, Job, CantRecursos, Socket, Msg_RELEASE, JobTimeout, Descuentos, TimeJob).
 
 % Devuelve a cada nodo lo que realmente se le había tomado, de forma atómica.
 % Recibe: Descuentos(List de tuplas).
@@ -122,15 +122,15 @@ revertir_descuentos(Descuentos) ->
 
 % Recibe la respuesta de la peticion del job enviado y maneja que hacer en cada caso, cuando termina un job, lo elimina de la tabla de Pendientes, registra su log y envia -
 %- msg a wait_jobs avisando que termino.
-% Recibe: JobID(string), Job(string), CantRecursos(int), Socket, Msg_Release(string), JobTimeuot(int en milisegundos).
-procesar_respuesta(JobID, Job, _CantRecursos, Socket, Msg_RELEASE, JobTimeout, Descuentos) ->
+% Recibe: JobID(string), Job(string), CantRecursos(int), Socket, Msg_Release(string), JobTimeuot(int), Descuentos(list tuplas), TimeJob(int).
+procesar_respuesta(JobID, Job, _CantRecursos, Socket, Msg_RELEASE, JobTimeout, Descuentos, TimeJob) ->
     receive 
         {tcp_msg, Bin} -> 
             case binary_to_list(Bin) of
                 "JOB_GRANTED " ++ _Rest -> 
                     borrarPendiente_and_registrarLog(JobID, Job, "JOB_GRANTED"),
                     io:format("Simulando trabajo. . .~n"),
-                    timer:sleep(2000),
+                    timer:sleep(1000 * TimeJob),
                     io:format("Trabajo finalizado!~n"),
                     gen_tcp:send(Socket, list_to_binary(Msg_RELEASE)),
                     % Devolvemos lo que habíamos descontado
@@ -169,20 +169,20 @@ procesar_respuesta(JobID, Job, _CantRecursos, Socket, Msg_RELEASE, JobTimeout, D
 % - {JobID(int), Job(string), CantRecursos(int)} enviado por generate_jobs, en este caso arma las peticiones,
 %   crea un proceso (conectado al mismo agente) que atienda el job (handler_job) y vuelve a llamarse recurisvamente, incrementando en 1 los jobs activos.
 
-% Recibe :
-recibir_jobs_y_armar_peticiones(Socket, JobTimeout, JobsActivos) ->
+% Recibe : Socket, JobTimeout(int), JobActivos(int), TimeJob(int).
+recibir_jobs_y_armar_peticiones(Socket, JobTimeout, JobsActivos, TimeJob) ->
     receive
          no_hay_mas_jobs -> 
             wait_jobs(JobsActivos);
 
          {job_terminado, _JobID} ->
-            recibir_jobs_y_armar_peticiones(Socket, JobTimeout, JobsActivos - 1);
+            recibir_jobs_y_armar_peticiones(Socket, JobTimeout, JobsActivos - 1, TimeJob);
 
          {JobID, Job, CantRecursos} -> 
             % io:format("[ERLANG] Procesando Job ~s (~s) ~n", [JobID, Job]),
             {Msg_REQUEST, Msg_RELEASE, Descuentos} = armar_peticiones(JobID, Job, CantRecursos),
-            spawn(job_manager, handler_job, [JobID, Job, CantRecursos, JobTimeout, Socket, Msg_REQUEST, Msg_RELEASE, Descuentos]),
-            recibir_jobs_y_armar_peticiones(Socket, JobTimeout, JobsActivos + 1)
+            spawn(job_manager, handler_job, [JobID, Job, CantRecursos, JobTimeout, Socket, Msg_REQUEST, Msg_RELEASE, Descuentos, TimeJob]),
+            recibir_jobs_y_armar_peticiones(Socket, JobTimeout, JobsActivos + 1, TimeJob)
     end.
 
 % Recibe el nombre del recurso, "cpu", "mem", o "gpu", la cantidad de este, arma el string con el PEDIDO 

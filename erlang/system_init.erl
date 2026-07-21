@@ -1,5 +1,5 @@
 -module(system_init).
--export([inicializar_sistema/1, supervisor_scheduler_jobs/3]).
+-export([inicializar_sistema/3, supervisor_scheduler_jobs/4]).
 
 %=============================================== FUNCIONES SISTEMA ===================================================
 %MapNodos : mapa donde key es el nodo y value lista con 3 enteros, donde cada entero representa en orden la cantidad de CPU, MEM, GPU
@@ -8,18 +8,18 @@
 
 % Recibe: JobTimeout(int en milisegundos), Socket, Pid_caller(int, quien inicializó el sistema y espera la confirmación)
 % No retorna nada, vive siempre mientras el sistema este corriendo.
-supervisor_scheduler_jobs(JobTimeout, Socket, Pid_caller) ->
+supervisor_scheduler_jobs(JobTimeout, Socket, Pid_caller, TimeJob) ->
     process_flag(trap_exit, true),
     
     % Lanzamos el scheduler por primera vez
-    Pid_scheduler_job = spawn_link(main, scheduler_jobs, [JobTimeout, Socket]),
+    Pid_scheduler_job = spawn_link(main, scheduler_jobs, [JobTimeout, Socket, TimeJob]),
     register(pid_scheduler_job, Pid_scheduler_job),
     
     % Avisamos al inicializador que ya está todo montado
     Pid_caller ! scheduler_listo,
     
     % Saltamos al bucle de escucha perpetuo pasándole el PID del scheduler actual
-    bucle_supervisor(JobTimeout, Socket, Pid_scheduler_job).
+    bucle_supervisor(JobTimeout, Socket, Pid_scheduler_job, TimeJob).
 
 % Loop sin fin que espera señales de salida ('EXIT') del proceso scheduler_job.
 % Distingue terminación normal de un crash (revive el proceso con
@@ -27,7 +27,7 @@ supervisor_scheduler_jobs(JobTimeout, Socket, Pid_caller) ->
 
 % Recibe: JobTimeout(int), Socket, Pid_scheduler_job(Pid del scheduler que se está supervisando)
 % No retorna nada relevante: corre indefinidamente (o hasta terminación normal del scheduler).
-bucle_supervisor(JobTimeout, Socket, Pid_scheduler_job) ->
+bucle_supervisor(JobTimeout, Socket, Pid_scheduler_job, TimeJob) ->
     receive 
         {'EXIT', Pid_scheduler_job, normal} ->
             % El scheduler terminó de procesar todo de forma limpia. 
@@ -38,7 +38,7 @@ bucle_supervisor(JobTimeout, Socket, Pid_scheduler_job) ->
         {'EXIT', Pid_scheduler_job, Reason} ->
             io:format("Error provocado por: ~p. ~nRestaurando sistema...~n", [Reason]),
             
-            NuevoPid = spawn_link(main, scheduler_jobs, [JobTimeout, Socket]),
+            NuevoPid = spawn_link(main, scheduler_jobs, [JobTimeout, Socket, TimeJob]),
             
             case whereis(pid_scheduler_job) of
                 undefined -> ok;
@@ -48,12 +48,12 @@ bucle_supervisor(JobTimeout, Socket, Pid_scheduler_job) ->
             
             % RECURSIÓN LIMPIA: Volvemos al bucle pasándole el NUEVO Pid.
             % ¡Fijate que jamás volvimos a tocar la inicialización ni clonamos nada más!
-            bucle_supervisor(JobTimeout, Socket, NuevoPid);
+            bucle_supervisor(JobTimeout, Socket, NuevoPid, TimeJob);
 
         {'EXIT', _OtroPid, _Reason} ->
             % Se cayó otra cosa (por ejemplo el padre o wait_jobs)
             % Seguimos escuchando con el mismo PID de scheduler de antes
-            bucle_supervisor(JobTimeout, Socket, Pid_scheduler_job)
+            bucle_supervisor(JobTimeout, Socket, Pid_scheduler_job, TimeJob)
     end.
 
 % Pide el mapa de nodos al agente C de forma SÍNCRONA y bloqueante, leyendo el socket directamente (sin pasar por tcp_deliver,
@@ -96,7 +96,7 @@ cargar_tabla_recursos(MapNodos) ->
 % tcp_deliver para empezar a escuchar respuestas del agente en tiempo de ejecución.
 % Recibe: Puerto(int)
 % Retorna: Socket (para que quien llamó pueda usarlo, ej: manual_loop en modo manual)
-inicializar_sistema(Puerto) -> 
+inicializar_sistema(Puerto, TimeJob, JobTimeoutInit) -> 
 
     % Nos conectamos al agente de C
     {ok, Socket} = tcp_connection:connect_agent(Puerto),
@@ -109,8 +109,8 @@ inicializar_sistema(Puerto) ->
     MapNodos = request_map_nodes_initial(Socket),  
     cargar_tabla_recursos(MapNodos),
 
-    JobTimeout = 3000,
-    spawn_link(system_init, supervisor_scheduler_jobs, [JobTimeout, Socket, self()]),
+    JobTimeout = 1000 * JobTimeoutInit,
+    spawn_link(system_init, supervisor_scheduler_jobs, [JobTimeout, Socket, self(), TimeJob]),
     
     receive
         scheduler_listo -> ok
