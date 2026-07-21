@@ -4,8 +4,8 @@ RULE_NAME   := $(word 1, $(MAKECMDGOALS))
 MODE  		:= $(word 2, $(MAKECMDGOALS))
 JOBS  		:= $(word 3, $(MAKECMDGOALS))
 PORT   		:= $(word 4, $(MAKECMDGOALS))
-TIMEJOB  	:= $(or $(word 5, $(MAKECMDGOALS)), 2)
-TIMEOUT  	:= $(or $(word 6, $(MAKECMDGOALS)), 30)
+TIMEJOB  	:= $(or $(word 5, $(MAKECMDGOALS)), 1)
+TIMEOUT  	:= $(or $(word 6, $(MAKECMDGOALS)), 4)
 
 erlang:
 # 	@echo "Borrando el log anterior"
