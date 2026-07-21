@@ -119,6 +119,6 @@ inicializar_sistema(Puerto, TimeJob, JobTimeoutInit) ->
     end,
     
     % Creamos el proceso tcp deliver
-    spawn_link(tcp_connection, tcp_deliver, [Socket, JobTimeout]),
+    spawn_link(tcp_connection, tcp_deliver, [Socket]),
     Socket.
 
