@@ -24,13 +24,13 @@ Alan Hergenreder
 En este trabajo práctico, cada integrante del equipo asumió un rol principal, manteniendo colaboración en la integración general del sistema.
 
 \begin{itemize}
-    \item \textbf{Dallas Cañari Benites - Ingeniero de comunicaciones (C)}: responsable de la implementación del servidor en C utilizando \texttt{epoll}, manejo de sockets TCP/UDP, comunicación no bloqueante y gestión de buffers.
+    \item \textbf{Dallas Cañari Benites - Ingeniero de comunicaciones (C)}
 
-    \item \textbf{Alan Hergenreder - Gestor de recursos}: encargado de la administración de recursos del sistema, estructuras de datos, colas FIFO, asignación y liberación de recursos, y control de jobs activos.
+    \item \textbf{Alan Hergenreder - Gestor de recursos (C)}
 
-    \item \textbf{Valentino Perticarati - Planificador y lógica anti-deadlock (Erlang)}: desarrollo del planificador en Erlang, generación de jobs, comunicación con el servidor en C y diseño de estrategias de prevención/detección de deadlocks.
+    \item \textbf{Valentino Perticarati - Planificador y lógica anti-deadlock (Erlang)}
 
-    \item \textbf{Benjamín Alomar - Integración, testing y documentación}: responsable de la integración entre módulos, scripts de prueba, validación de interoperabilidad y documentación del sistema.
+    \item \textbf{Benjamín Alomar - Integración, testing y documentación}
 \end{itemize}
 
 \section{Diseño}
@@ -251,13 +251,13 @@ En cambio, si el scheduler finaliza normalmente, el supervisor también termina 
 
 Se utilizan dos tablas ETS con responsabilidades bien diferenciadas.
 
-La tabla \texttt{pendientes} almacena, para cada job activo, su identificador,
+\noindent La tabla \texttt{pendientes} almacena, para cada job activo, su identificador,
 el proceso handler encargado de gestionarlo y los descuentos de recursos
 aplicados sobre los nodos. Esta información permite redirigir correctamente
 las respuestas provenientes del agente y restaurar los recursos reservados
 cuando un job finaliza, es rechazado o vence su timeout.
 
-La tabla \texttt{recursos\_nodos} mantiene la disponibilidad de CPU, MEMORIA
+\noindent La tabla \texttt{recursos\_nodos} mantiene la disponibilidad de CPU, MEMORIA
 y GPU de cada nodo, con una entrada independiente por cada combinación
 \texttt{\{Nodo, TipoRecurso\} => Cantidad}, además de una entrada con el
 orden de recorrido de los nodos utilizado al repartir un pedido entre varios.
@@ -267,7 +267,7 @@ solicitan recursos simultáneamente. El mapa recibido inicialmente del agente
 C (\texttt{maps:from\_list}) se usa únicamente como paso intermedio de
 parseo antes de volcarse a esta tabla.
 
-Al tratarse de tablas ETS públicas, todos los procesos del scheduler pueden
+\noindent Al tratarse de tablas ETS públicas, todos los procesos del scheduler pueden
 acceder concurrentemente a ellas sin necesidad de intercambiar mensajes
 adicionales.
 
@@ -275,15 +275,15 @@ adicionales.
 
 Cuando un job solicita una cantidad de recursos superior a la disponible en un único nodo, el scheduler intenta repartir dicha solicitud entre varios nodos disponibles.
 
-Por ejemplo, si un job necesita cuatro CPUs y ningún nodo posee las cuatro disponibles, el scheduler puede construir una petición que combine recursos provenientes de distintos nodos.
+\noindent Por ejemplo, si un job necesita cuatro CPUs y ningún nodo posee las cuatro disponibles, el scheduler puede construir una petición que combine recursos provenientes de distintos nodos.
 
-Esta estrategia busca aprovechar mejor los recursos globales del sistema y aumentar la probabilidad de ejecución de los trabajos.
+\noindent Esta estrategia busca aprovechar mejor los recursos globales del sistema y aumentar la probabilidad de ejecución de los trabajos.
 
-Durante este proceso, el scheduler realiza reservas locales descontando inmediatamente los recursos seleccionados de la tabla ETS mediante operaciones atómicas, antes de enviar el \texttt{JOB\_REQUEST}. De esta manera, otros jobs consideran esos recursos como ocupados y no pueden asignarlos simultáneamente. Si el trabajo finaliza correctamente (\texttt{JOB\_GRANTED}), es rechazado (\texttt{JOB\_DENIED}) o expira por timeout, dichas reservas se revierten automáticamente, restaurando los recursos en la tabla ETS y manteniendo consistente el estado local del scheduler.
+\noindent Durante este proceso, el scheduler realiza reservas locales descontando inmediatamente los recursos seleccionados de la tabla ETS mediante operaciones atómicas, antes de enviar el \texttt{JOB\_REQUEST}. De esta manera, otros jobs consideran esos recursos como ocupados y no pueden asignarlos simultáneamente. Si el trabajo finaliza correctamente (\texttt{JOB\_GRANTED}), es rechazado (\texttt{JOB\_DENIED}) o expira por timeout, dichas reservas se revierten automáticamente, restaurando los recursos en la tabla ETS y manteniendo consistente el estado local del scheduler.
 
 \section{Problemas encontrados y soluciones}
 
-Durante el desarrollo del agente en C surgieron varios problemas de concurrencia que se fueron detectando y corrigiendo a medida que se probaba el sistema. A continuación se describen los más relevantes.
+\noindent Durante el desarrollo del agente en C surgieron varios problemas de concurrencia que se fueron detectando y corrigiendo a medida que se probaba el sistema. A continuación se describen los más relevantes.
 
 \paragraph{Envío cruzado sobre un mismo fd}
 
@@ -299,9 +299,7 @@ Al procesar un \texttt{JOB\_REQUEST}, inicialmente se enviaba el \texttt{RESERVE
 
 \paragraph{Mecanismo de descubrimiento de nodos}
 
-Dejar de estar conectado con un agente no debe interpretarse como que ese nodo está caído, ya que puede tratarse solo de un problema de la conexión y no del nodo en sí. Se corrigió el manejo de la desconexión de un agente para que únicamente limpie el identificador de conexión de su entrada en \texttt{agent\_table}, sin eliminarla ni tocar su temporizador de anuncios, dejando que sea exclusivamente el vencimiento de ese temporizador el que determine si un nodo se considera caído.
-
-Además, se detectó que al actualizar los recursos de un nodo ya conocido no se actualizaba también la cantidad de recursos de la entrada, quedando desincronizada de la cantidad de valores efectivamente copiados si esa cantidad cambiaba entre un anuncio y otro. Se corrigió para que ambos datos se actualicen siempre juntos.
+Dejar de estar conectado con un agente no debe interpretarse como que ese nodo está caído, ya que puede tratarse solo de un problema de la conexión y no del nodo en sí. Se corrigió el manejo de la desconexión de un agente para que únicamente limpie el identificador de conexión de su entrada en \texttt{agent\_table}, sin eliminarla ni tocar su temporizador de anuncios, dejando que sea exclusivamente el vencimiento de ese temporizador el que determine si un nodo se considera caído. Además, se detectó que al actualizar los recursos de un nodo ya conocido no se actualizaba también la cantidad de recursos de la entrada, quedando desincronizada de la cantidad de valores efectivamente copiados si esa cantidad cambiaba entre un anuncio y otro. Se corrigió para que ambos datos se actualicen siempre juntos.
 
 \section{Estrategia contra deadlock}
 
