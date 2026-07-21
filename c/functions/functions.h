@@ -13,6 +13,7 @@ extern int epollfd;
 extern int udp_sock;            // Socket para envio/recibo de anuncios
 extern int scheduler_fd;       // Socket de conexion con el scheduler
 extern uint64_t scheduler_id;
+extern int time_per_request;
 
 /* Obtiene el puerto (se lo asigna a 'puerto_tcp) y los recursos (los guarda en los parametros) desde la linea de comandos. 
 En caso de error por formato, imprime indicando el formato y devuelve -1. */

@@ -38,6 +38,7 @@ int epollfd = -1;
 int udp_sock = -1;
 int scheduler_fd = -1;
 uint64_t scheduler_id = UINT64_MAX;
+int time_per_request = 0;
 
 int main(int argc, char* argv[]) {
     /* Obtenemos y seteamos: el puerto y los recursos locales*/

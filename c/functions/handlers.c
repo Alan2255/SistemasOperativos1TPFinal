@@ -674,6 +674,7 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
                 fd_table_dec_and_release(agent_info);
             }
         }
+        sleep(time_per_request);
     }
 
     if (regret) {
