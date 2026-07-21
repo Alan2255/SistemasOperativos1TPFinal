@@ -27,7 +27,7 @@ tcp_deliver(Socket, JobTimeout) ->
     % Espera de forma bloqueante un mensaje desde el socket TCP.
     case gen_tcp:recv(Socket, 0) of
         {ok, Data} -> 
-            io:format("[tcp_deliver] ~p~n", [Data]),
+            io:format("~p~n", [Data]),
             Str = binary_to_list(Data),
             % Separa el mensaje por espacios para obtener el JobID.
             case string:tokens(Str, " ") of
@@ -49,7 +49,7 @@ tcp_deliver(Socket, JobTimeout) ->
             tcp_deliver(Socket, JobTimeout);
         % El agente C cerró la conexión TCP
         {error, closed} -> 
-            io:format("[tcp_deliver] Conexion cerrada.~n");
+            io:format("Conexion con el servidor cerrada~n");
         % Ocurrió algún otro error en la comunicación.
         {error, Reason} -> 
             io:format("[tcp_deliver] Error: ~p~n", [Reason])

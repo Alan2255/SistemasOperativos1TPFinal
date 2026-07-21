@@ -131,7 +131,7 @@ procesar_respuesta(JobID, Job, _CantRecursos, Socket, Msg_RELEASE, JobTimeout, D
                     borrarPendiente_and_registrarLog(JobID, Job, "JOB_GRANTED"),
                     io:format("Simulando trabajo. . .~n"),
                     timer:sleep(2000),
-                    io:format("Trabajo finalizado!.~n"),
+                    io:format("Trabajo finalizado!~n"),
                     gen_tcp:send(Socket, list_to_binary(Msg_RELEASE)),
                     % Devolvemos lo que habíamos descontado
                     revertir_descuentos(Descuentos),
@@ -179,8 +179,7 @@ recibir_jobs_y_armar_peticiones(Socket, JobTimeout, JobsActivos) ->
             recibir_jobs_y_armar_peticiones(Socket, JobTimeout, JobsActivos - 1);
 
          {JobID, Job, CantRecursos} -> 
-            io:format("[scheduler] Procesando Job ~s (~s) ~n", [JobID, Job]),
-
+            % io:format("[ERLANG] Procesando Job ~s (~s) ~n", [JobID, Job]),
             {Msg_REQUEST, Msg_RELEASE, Descuentos} = armar_peticiones(JobID, Job, CantRecursos),
             spawn(job_manager, handler_job, [JobID, Job, CantRecursos, JobTimeout, Socket, Msg_REQUEST, Msg_RELEASE, Descuentos]),
             recibir_jobs_y_armar_peticiones(Socket, JobTimeout, JobsActivos + 1)
@@ -237,7 +236,7 @@ armar_peticiones(JobID, Job, CantRecursos) ->
 
 % Cuando ya no quedan jobs activos (JobsActivos llegó a 0), avisa a cliente_pid que todo terminó.
 wait_jobs(0) ->
-    io:format("[scheduler] Todos los jobs finalizaron.~n"),
+    io:format("Todos los jobs finalizaron~n"),
     cliente_pid ! fin,
     ok;
 

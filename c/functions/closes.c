@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include "../structures/fd_table.h"
 #include "../structures/agent_table.h"
 #include "../structures/job_table.h"
@@ -28,5 +29,6 @@ void close_scheduler_conn(FdEntry *info) {
     }
 
     fd_table_request_close(info);
+    printf("Conexion con cliente cerrada\n");
     scheduler_id = UINT64_MAX;
 }

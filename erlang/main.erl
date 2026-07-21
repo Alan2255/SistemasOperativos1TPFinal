@@ -56,7 +56,7 @@ generate_jobs(N) ->
              Job = Recurso1 ++ ":" ++ Cantidad1 ++ ":" ++ Recurso2 ++ ":" ++ Cantidad2 ++ ":" ++  Recurso3 ++ ":" ++ Cantidad3,
              pid_scheduler_job ! {JobID, Job, 3}
         end,
-    io:format("[job_generator] ~p ~p ~p ~n",[JobID, Job, Eleccion_recursos]),
+    io:format("JOB REQUEST ~p ~p ~n",[JobID, Job]),
     generate_jobs(N-1).%Ya generamos un job restamos el N de cantidad a generar y llamamos de nuevo a la funcion.
 
 % Punto de entrada del proceso scheduler: arranca el contador de jobs activos en 0 y llama a job_manager:recibir_jobs_y_armar_peticiones, 

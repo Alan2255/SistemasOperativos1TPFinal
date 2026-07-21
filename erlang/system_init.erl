@@ -22,7 +22,7 @@ supervisor_scheduler_jobs(JobTimeout, Socket, Pid_caller) ->
     bucle_supervisor(JobTimeout, Socket, Pid_scheduler_job).
 
 % Loop sin fin que espera señales de salida ('EXIT') del proceso scheduler_job.
-% Distingue terminación normal (corta en paz) de un crash (revive el proceso con
+% Distingue terminación normal de un crash (revive el proceso con
 % un nuevo Pid), e ignora EXIT de cualquier otro proceso que no sea el scheduler actual.
 
 % Recibe: JobTimeout(int), Socket, Pid_scheduler_job(Pid del scheduler que se está supervisando)
@@ -32,11 +32,11 @@ bucle_supervisor(JobTimeout, Socket, Pid_scheduler_job) ->
         {'EXIT', Pid_scheduler_job, normal} ->
             % El scheduler terminó de procesar todo de forma limpia. 
             % El supervisor ya no es necesario, cerramos tranquilos.
-            io:format("[supervisor] Mi trabajo termino, me voy en paz.~n"),
+            % io:format("[supervisor] Mi trabajo termino, me voy en paz.~n"),
             ok;
 
         {'EXIT', Pid_scheduler_job, Reason} ->
-            io:format("[supervisor] Mori por: ~p. ~n[supervisor] Reviviendo...~n", [Reason]),
+            io:format("Error provocado por: ~p. ~nRestaurando sistema...~n", [Reason]),
             
             NuevoPid = spawn_link(main, scheduler_jobs, [JobTimeout, Socket]),
             
@@ -100,6 +100,7 @@ inicializar_sistema(Puerto) ->
 
     % Nos conectamos al agente de C
     {ok, Socket} = tcp_connection:connect_agent(Puerto),
+    io:format("Conectado al servidor~n"),
     ets:new(pendientes, [named_table, public, set]),
     ets:new(recursos_nodos, [named_table, public, set]), 
 
