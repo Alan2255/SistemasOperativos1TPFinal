@@ -105,7 +105,6 @@ elegir_nodos(Recurso, Cantidad) ->
 % Recibe: JobID(string), Job(string), CantRecursos(int), JobTimeout(int), Socket,
 % Msg_REQUEST(string), Msg_RELEASE(string), Descuentos(List de tuplas),TimeJob(int).
 handler_job(JobID, Job, CantRecursos, JobTimeout, Socket, Msg_REQUEST, Msg_RELEASE, Descuentos, TimeJob) ->
-    io:format("[handler_job] ~p~n",[JobTimeout]),
     ets:insert(pendientes, {JobID, Job, self(), Descuentos}), %Para evitar race cond insertamos primero y luego mandamos el msg
     gen_tcp:send(Socket, list_to_binary(Msg_REQUEST)),
     procesar_respuesta(JobID, Job, CantRecursos, Socket, Msg_RELEASE, JobTimeout, Descuentos, TimeJob).
@@ -180,9 +179,7 @@ recibir_jobs_y_armar_peticiones(Socket, JobTimeout, JobsActivos, TimeJob) ->
             recibir_jobs_y_armar_peticiones(Socket, JobTimeout, JobsActivos - 1, TimeJob);
 
          {JobID, Job, CantRecursos} -> 
-            % io:format("[ERLANG] Procesando Job ~s (~s) ~n", [JobID, Job]),
             {Msg_REQUEST, Msg_RELEASE, Descuentos} = armar_peticiones(JobID, Job, CantRecursos),
-            io:format("[antes del spawn de handler_job] ~p~n",[JobTimeout]),
             spawn(job_manager, handler_job, [JobID, Job, CantRecursos, JobTimeout, Socket, Msg_REQUEST, Msg_RELEASE, Descuentos, TimeJob]),
             recibir_jobs_y_armar_peticiones(Socket, JobTimeout, JobsActivos + 1, TimeJob)
     end.
