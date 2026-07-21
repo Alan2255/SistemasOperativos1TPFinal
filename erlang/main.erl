@@ -77,7 +77,7 @@ server(Modo, N, Puerto, TimeJob, JobTimeoutInit) ->
 % spawneando un handler_job por cada uno. 
 % Termina al recibir 'fin', momento en el que limpia las tablas ETS usadas durante la ejecución.
 % Recibe: Socket, TimeJob(int)
-manual_loop(Socket, TimeJob) -> %Asi deberia quedar el string a mandar a C  JOB_REQUEST 1001 192.168.1.2:cpu:2 192.168.1.3:gpu:1
+manual_loop(Socket, TimeJob, JobTimeoutInit) -> %Asi deberia quedar el string a mandar a C  JOB_REQUEST 1001 192.168.1.2:cpu:2 192.168.1.3:gpu:1
     receive     
         %Desde consola envias el JOB entero por ej: {"192.168.1.2:cpu:2 192.168.1.3:gpu:1"}.
         {Job} ->
@@ -86,8 +86,8 @@ manual_loop(Socket, TimeJob) -> %Asi deberia quedar el string a mandar a C  JOB_
                 Msg_REQUEST = "JOB_REQUEST" ++ " " ++ JobID ++ " " ++ Job,
                 Msg_RELEASE = "JOB_RELEASE" ++ " " ++ JobID,
                 %Pasamos 0 en CantRecusos pq no importan y ademas procesar_respuesta los ignora. 
-                spawn(job_manager, handler_job, [JobID, Job, 0, 3000, Socket, Msg_REQUEST, Msg_RELEASE, [], TimeJob]), %Manda el msg al agente espera su rta y la maneja
-                manual_loop(Socket, TimeJob);
+                spawn(job_manager, handler_job, [JobID, Job, 0, 1000 * JobTimeoutInit, Socket, Msg_REQUEST, Msg_RELEASE, [], TimeJob]), %Manda el msg al agente espera su rta y la maneja
+                manual_loop(Socket, TimeJob, JobTimeoutInit);
         % Terminará cuando el usuario mande cliente_pid ! fin.
         fin ->  ok 
     end,
@@ -119,7 +119,7 @@ client(Modo, N, Puerto, TimeJob, JobTimeoutInit) ->
             ets:delete(recursos_nodos); %Liberamos la tabla de recursos_nodos.
 
         manual ->
-            manual_loop(Socket, TimeJob); % Mismo socket que usa tcp_deliver
+            manual_loop(Socket, TimeJob, JobTimeoutInit); % Mismo socket que usa tcp_deliver
 
         _ -> 
             io:format("Los modos son: manual o random~n"),

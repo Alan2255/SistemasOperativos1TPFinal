@@ -109,7 +109,9 @@ inicializar_sistema(Puerto, TimeJob, JobTimeoutInit) ->
     MapNodos = request_map_nodes_initial(Socket),  
     cargar_tabla_recursos(MapNodos),
 
+    % io:format("Anter ~p~n",[JobTimeoutInit]),
     JobTimeout = 1000 * JobTimeoutInit,
+    % io:format("Despues ~p~n",[JobTimeout]),
     spawn_link(system_init, supervisor_scheduler_jobs, [JobTimeout, Socket, self(), TimeJob]),
     
     receive

@@ -1,5 +1,5 @@
 -module(tcp_connection).
--export([connect_agent/1, tcp_deliver/2]).
+-export([connect_agent/1, tcp_deliver/1]).
 
 %=============================================== FUNCIONES TCP ===================================================
 
@@ -21,9 +21,9 @@ connect_agent(Puerto) ->
 % El mapa de nodos se pide una única vez, de forma síncrona, en system_init:request_map_nodes_initial, ANTES de que
 % este proceso siquiera exista.
 
-% Recibe: Socket, JobTimeout(int, no se usa acá pero se arrastra para futuros usos)
-% No retorna nada relevante: corre indefinidamente hasta que el socket se cierra o falla.
-tcp_deliver(Socket, JobTimeout) ->
+% Recibe: Socket
+% Corre indefinidamente hasta que el socket se cierra o falla.
+tcp_deliver(Socket) ->
     % Espera de forma bloqueante un mensaje desde el socket TCP.
     case gen_tcp:recv(Socket, 0) of
         {ok, Data} -> 
@@ -46,7 +46,7 @@ tcp_deliver(Socket, JobTimeout) ->
                     io:format("[tcp_deliver] Paquete invalido: ~p~n", [Str])
             end,
             % Vuelve a esperar el siguiente mensaje.
-            tcp_deliver(Socket, JobTimeout);
+            tcp_deliver(Socket);
         % El agente C cerró la conexión TCP
         {error, closed} -> 
             io:format("[--] Conexion con el servidor cerrada~n");

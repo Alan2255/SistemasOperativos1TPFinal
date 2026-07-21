@@ -198,6 +198,7 @@ void handle_listen_scheduler(FdEntry* info) {
     scheduler_id = new_id;
 
     // printf("[handle_listen_scheduler] se conecto el scheduler y se le asigno el id 0x%016" PRIx64 ".\n", scheduler_id);
+    printf("[++] Cliente iniciado [Erlang]\n");
 
 }
 
@@ -299,7 +300,7 @@ void handle_announce(FdEntry* info) {
             strcpy(((fd_node_timer_data *)(timer_entry->data))->ip, ip);
             strcpy(((fd_node_timer_data *)(timer_entry->data))->port, port);
 
-            printf("[<-] NEW AGENT %s:%s",
+            printf("[++] NEW AGENT %s:%s",
                 ((fd_node_timer_data *)(timer_entry->data))->ip,
                 ((fd_node_timer_data *)(timer_entry->data))->port);
             for (int i = 0; i < res_count; i++) {
