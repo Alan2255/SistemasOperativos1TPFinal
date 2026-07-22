@@ -4,24 +4,18 @@
 \usepackage[utf8]{inputenc}
 \usepackage{geometry}
 \usepackage{graphicx} % Required for inserting images
-\geometry{margin=2.5cm}
+\geometry{margin=1.5cm}
 
 \title{\textbf{Sistemas Operativos I}\\Informe de Trabajo Práctico Final}
-\author{
-Dallas Cañari Benites \\
-Benjamín Alomar \\
-Valentino Perticarari \\
-Alan Hergenreder
-}
-\date{Junio 2026}
+\author{}
+\date{}
 
 \begin{document}
 
 \maketitle
 
-\section{Roles y contribuciones}
-
-En este trabajo práctico, cada integrante del equipo asumió un rol principal, manteniendo colaboración en la integración general del sistema.
+\vspace{-1.5cm}
+\section{Miembros y roles}
 
 \begin{itemize}
     \item \textbf{Dallas Cañari Benites - Ingeniero de comunicaciones (C)}
@@ -39,25 +33,23 @@ En este trabajo práctico, cada integrante del equipo asumió un rol principal, 
 
 El sistema implementado sigue una arquitectura distribuida compuesta por dos componentes principales: un \textit{Resource Manager Agent} desarrollado en C y un \textit{Job Scheduler} desarrollado en Erlang.
 
-Cada nodo del sistema ejecuta ambas aplicaciones de forma independiente. El agente en C es responsable de la comunicación con otros nodos, el mantenimiento de los recursos locales y el descubrimiento dinámico de agentes en la red. Por otro lado, el scheduler en Erlang es responsable de generar trabajos, solicitar recursos y coordinar la ejecución de los jobs.
+\noindent Cada nodo del sistema ejecuta ambas aplicaciones de forma independiente. El agente en C es responsable de la comunicación con otros nodos, el mantenimiento de los recursos locales y el descubrimiento dinámico de agentes en la red. Por otro lado, el scheduler en Erlang es responsable de generar trabajos, solicitar recursos y coordinar la ejecución de los jobs.
 
-La comunicación entre ambos componentes se realiza mediante TCP utilizando la interfaz local definida en la consigna. A su vez, los agentes en C se comunican entre sí utilizando TCP para la reserva de recursos y UDP broadcast para el descubrimiento automático de nodos.
+\noindent Tanto la comunicación entre agentes de C como entre C y Erlang se realiza mediante TCP. Además los agentes de C utilizan UPD broadcast para el descubrimiento automático de nodos.
 
 \subsection{Modelo de ejecución}
 
-El sistema fue diseñado siguiendo un modelo concurrente que aprovecha las características de ambos lenguajes utilizados.
-
-En el \textbf{agente desarrollado en C} se emplea un modelo orientado a eventos basado en \texttt{epoll}, combinado con un esquema multithreading de una cantidad fija de hilos. Todos esos hilos monitorean, mediante llamados a \texttt{epoll\_wait} sobre una misma instancia de \texttt{epoll} compartida, la totalidad de los descriptores activos del sistema. Esto incluye conexiones provenientes de otros agentes, conexiones del scheduler local, el socket UDP utilizado para el descubrimiento de nodos y los temporizadores asociados a tareas periódicas. Cuando alguno de estos descriptores genera un evento, únicamente uno de los hilos bloqueados en \texttt{epoll\_wait} es despertado para atenderlo. 
+El \textbf{agente desarrollado en C} utiliza \texttt{epoll}, combinado con un esquema multihilo. Los hilos monitorean, mediante llamados a \texttt{epoll\_wait} en la misma instancia de \texttt{epoll} compartida, los descriptores activos del sistema. Esto incluye conexiones entre agentes, conexiones del scheduler local, el socket UDP para el descubrimiento de nodos y los temporizadores de tareas periódicas. Cuando un descriptor genera un evento, únicamente uno de los hilos bloqueados en \texttt{epoll\_wait} es despertado para atenderlo. 
 
 El \textbf{scheduler desarrollado en Erlang} utiliza el modelo de actores propio del lenguaje. Existe un proceso planificador central encargado de recibir los jobs, construir las peticiones correspondientes y crear un proceso independiente (\textit{handler}) para cada trabajo. Cada handler gestiona el ciclo de vida completo del job de forma concurrente. Además, un proceso supervisor monitorea exclusivamente al scheduler principal y lo reinicia automáticamente si finaliza de manera inesperada.
 
-Esta combinación permite aprovechar la eficiencia de C para el manejo de eventos de red y la facilidad de Erlang para desarrollar sistemas concurrentes y tolerantes a fallos.
+% Esta combinación permite aprovechar la eficiencia de C para el manejo de eventos de red y la facilidad de Erlang para desarrollar sistemas concurrentes y tolerantes a fallos.
 
 \subsection{Componente agente C}
 
-El agente C actúa simultáneamente como servidor y cliente dentro del sistema distribuido.
+% El agente C actúa simultáneamente como servidor y cliente dentro del sistema distribuido.
 
-Como servidor, acepta tanto las conexiones entrantes de otros agentes remotos como la conexión local del scheduler Erlang, y atiende las solicitudes que le llegan por cada una: a los agentes les procesa los mensajes \texttt{RESERVE} y \texttt{RELEASE} sobre sus recursos locales, y al scheduler le atiende los comandos \texttt{JOB\_REQUEST}, \texttt{JOB\_RELEASE} y \texttt{GET\_NODES}.
+El agente C acepta tanto las conexiones entrantes de otros agentes remotos como la conexión local del scheduler Erlang, y atiende las solicitudes que le llegan: a los agentes les procesa los mensajes \texttt{RESERVE} y \texttt{RELEASE} sobre sus recursos locales, y al scheduler le atiende los comandos \texttt{JOB\_REQUEST}, \texttt{JOB\_RELEASE} y \texttt{GET\_NODES}.
 
 Como cliente, establece conexiones TCP hacia otros agentes (si todavia no se hizo) cuando necesita solicitar recursos
 remotos para un determinado job, y les envia los mensajes \texttt{RESERVE} y \texttt{RELEASE} correspondientes.
@@ -73,22 +65,22 @@ Internamente, el agente mantiene las siguientes estructuras:
 
 \subsection{Componente scheduler Erlang}
 
-El scheduler implementado en Erlang es el encargado de coordinar la ejecución de los trabajos y de interactuar con el agente local desarrollado en C.
+\noindent El scheduler implementado en Erlang es el encargado de coordinar la ejecución de los trabajos y de interactuar con el agente local desarrollado en C.
 
-Durante la inicialización establece una conexión TCP con el agente, solicita de forma síncrona el mapa de nodos disponibles mediante el comando \texttt{GET\_NODES} y almacena esa información en una tabla ETS que mantiene el estado de los recursos disponibles en cada nodo.
+\noindent Durante la inicialización establece una conexión TCP con el agente, solicita de forma síncrona el mapa de nodos disponibles mediante el comando \texttt{GET\_NODES} y almacena esa información en una tabla ETS que mantiene el estado de los recursos disponibles en cada nodo.
 
-El sistema puede funcionar en dos modos:
+\noindent El sistema puede funcionar en dos modos:
 
 \begin{itemize}
     \item \textbf{Modo random}: genera automáticamente una cantidad configurable de jobs con requerimientos aleatorios de CPU, MEMORIA y GPU.
     \item \textbf{Modo manual}: permite que el usuario ingrese manualmente los pedidos desde la consola.
 \end{itemize}
 
-Cada job recibe un identificador único generado mediante \texttt{erlang:unique\_integer()}.
+\noindent Cada job recibe un identificador único generado mediante \texttt{erlang:unique\_integer()}.
 
-El scheduler analiza cada pedido, determina cómo distribuir los recursos entre los distintos nodos disponibles y construye los mensajes \texttt{JOB\_REQUEST} correspondientes.
+\noindent El scheduler analiza cada pedido, determina cómo distribuir los recursos entre los distintos nodos disponibles y construye los mensajes \texttt{JOB\_REQUEST} correspondientes.
 
-Para cada trabajo se crea un proceso independiente (\textit{handler}) encargado de:
+\noindent Para cada trabajo se crea un proceso independiente (\textit{handler}) encargado de:
 
 \begin{itemize}
     \item registrar el job en la tabla ETS de pendientes,
@@ -110,27 +102,19 @@ Durante el desarrollo del sistema se tomaron diversas decisiones de diseño orie
 
 \subsubsection{Decisiones de diseño en el agente C}
 
-\paragraph{Uso de epoll para el manejo de conexiones}
-
-Se utiliza una única instancia de \texttt{epoll}, monitoreada concurrentemente por un pool fijo de
+\paragraph{Uso de epoll para el manejo de conexiones} 
+Se utiliza una única instancia de \texttt{epoll}, monitoreada concurrentemente por una cantidad fija de 
 hilos que llaman a \texttt{epoll\_wait} sobre ella. De esta forma se puede atender una gran cantidad
-de conexiones TCP y UDP simultáneas con una cantidad acotada de hilos, aprovechando varios núcleos
-del procesador. Además, todos los descriptores se agregan en modo \texttt{EPOLLET}
+de conexiones TCP y UDP simultáneamente.
+Además, todos los descriptores se agregan en modo \texttt{EPOLLET}
 (\textit{edge-triggered}): como varios hilos comparten la misma instancia, esto asegura que ante
 un evento solo uno de ellos sea despertado, y evita que ese mismo evento se vuelva a reportar
 mientras no haya actividad nueva sobre el descriptor, siempre que el hilo que lo atiende lea o
 escriba hasta agotar los datos disponibles (hasta \texttt{EAGAIN}).
 
-Mediante dicha instancia se monitorean:
-\begin{itemize}
-    \item las conexiones con otros agentes,
-    \item la conexión con el scheduler local,
-    \item los sockets de escucha, tanto para nuevas conexiones de otros agentes como para la conexión con el scheduler,
-    \item el socket UDP de descubrimiento,
-    \item temporizadores asociados al sistema.
-\end{itemize}
+\noindent Mediante dicha instancia se monitorean las conexiones con otros agentes, la conexión con el scheduler local, los sockets de escucha, tanto para nuevas conexiones de otros agentes como para la conexión con el scheduler, el socket UDP de descubrimiento, y los temporizadores asociados al sistema.
 
-Como distintos hilos pueden llegar a manejar eventos sucesivos sobre una misma conexión (por
+\noindent Como distintos hilos pueden llegar a manejar eventos sucesivos sobre una misma conexión (por
 ejemplo, una lectura y una escritura casi simultáneas), la lectura y la escritura de cada una se
 protegen con mutex independientes, evitando que dos hilos operen a la vez sobre el mismo buffer.
 De la misma manera, el cierre de una conexión se coordina mediante campos de estado propios de
@@ -177,7 +161,7 @@ asociado a un nodo. Según el caso, el agente sigue una secuencia distinta de pa
 Se utilizaron temporizadores integrados mediante \texttt{timerfd}, los cuales pueden ser 
 gestionados por \texttt{epoll} como cualquier otro descriptor de archivo.
 
-Esto permitió implementar tareas periódicas dentro del mismo ciclo de eventos sin necesidad 
+\noindent Esto permitió implementar tareas periódicas dentro del mismo ciclo de eventos sin necesidad 
 de hilos adicionales, particularmente para:
 \begin{itemize}
     \item envío periódico de mensajes \texttt{ANNOUNCE},
@@ -212,16 +196,16 @@ de hilos adicionales, particularmente para:
     conexión, encontrar exactamente qué reserva liberar sin confundirla con la de otro pedido.
 \end{itemize}
 
-Mantener estas responsabilidades en estructuras separadas permite actuar ante los distintos comandos evitando mezclar información con propósitos distintos.
+\noindent Mantener estas responsabilidades en estructuras separadas permite actuar ante los distintos comandos evitando mezclar información con propósitos distintos.
 \subsubsection{Decisiones de diseño en el scheduler Erlang}
 
 \paragraph{Uso del modelo de actores}
 
 Se eligió aprovechar el modelo de actores de Erlang para representar la concurrencia del sistema.
 
-Cada job se ejecuta mediante un proceso independiente, lo que permite que múltiples trabajos avancen simultáneamente sin necesidad de mecanismos explícitos de sincronización compartida.
+\noindent Cada job se ejecuta mediante un proceso independiente, lo que permite que múltiples trabajos avancen simultáneamente sin necesidad de mecanismos explícitos de sincronización compartida.
 
-Además, el aislamiento entre procesos reduce el impacto de errores individuales.
+\noindent Además, el aislamiento entre procesos reduce el impacto de errores individuales.
 Los procesos se comunican mediante paso de mensajes para coordinar su ejecución, mientras que el estado compartido necesario se mantiene en tablas ETS, que permiten acceso concurrente mediante operaciones atómicas.
 \paragraph{Scheduler central y handlers independientes}
 
@@ -243,9 +227,9 @@ propia de cada trabajo.
 
 Se implementó un supervisor dedicado al proceso scheduler utilizando enlaces (\texttt{spawn\_link}) y captura de señales de salida (\texttt{trap\_exit}).
 
-Si el scheduler termina por un error, el supervisor crea automáticamente una nueva instancia del proceso, actualiza su registro global y continúa monitoreándolo sin necesidad de reinicializar el resto del sistema.
+\noindent Si el scheduler termina por un error, el supervisor crea automáticamente una nueva instancia del proceso, actualiza su registro global y continúa monitoreándolo sin necesidad de reinicializar el resto del sistema.
 
-En cambio, si el scheduler finaliza normalmente, el supervisor también termina su ejecución.
+\noindent En cambio, si el scheduler finaliza normalmente, el supervisor también termina su ejecución.
 
 \paragraph{Uso de ETS para estado compartido}
 
@@ -282,9 +266,6 @@ Cuando un job solicita una cantidad de recursos superior a la disponible en un �
 \noindent Durante este proceso, el scheduler realiza reservas locales descontando inmediatamente los recursos seleccionados de la tabla ETS mediante operaciones atómicas, antes de enviar el \texttt{JOB\_REQUEST}. De esta manera, otros jobs consideran esos recursos como ocupados y no pueden asignarlos simultáneamente. Si el trabajo finaliza correctamente (\texttt{JOB\_GRANTED}), es rechazado (\texttt{JOB\_DENIED}) o expira por timeout, dichas reservas se revierten automáticamente, restaurando los recursos en la tabla ETS y manteniendo consistente el estado local del scheduler.
 
 \section{Problemas encontrados y soluciones}
-
-\noindent Durante el desarrollo del agente en C surgieron varios problemas de concurrencia que se fueron detectando y corrigiendo a medida que se probaba el sistema. A continuación se describen los más relevantes.
-
 \paragraph{Envío cruzado sobre un mismo fd}
 
 Inicialmente cada fd se agregaba a \texttt{epoll} con la flag \texttt{EPOLLONESHOT}, buscando garantizar que un único hilo manejara ese descriptor a la vez. Esa garantía no cubría todos los casos: si llegaba un evento sobre la conexión de un agente, el hilo que lo recibía procesaba ese fd con normalidad, pero si en simultáneo llegaba un evento del scheduler que resultaba en mandarle un \texttt{RESERVE} a ese mismo agente (como parte de procesar un \texttt{JOB\_REQUEST}), un segundo hilo terminaba escribiendo sobre el mismo fd al mismo tiempo: \texttt{EPOLLONESHOT} solo evita que el propio evento de ese descriptor se entregue dos veces, pero no evita que otro camino de código, disparado por un evento distinto, acceda a él. La solución fue reemplazar ese mecanismo de sincronización por mutex (\texttt{mutex\_in} y \texttt{mutex\_out} en cada conexión), que protegen directamente la lectura y la escritura de cada una sin importar qué evento haya disparado el acceso.
@@ -301,16 +282,16 @@ Al procesar un \texttt{JOB\_REQUEST}, inicialmente se enviaba el \texttt{RESERVE
 
 Dejar de estar conectado con un agente no debe interpretarse como que ese nodo está caído, ya que puede tratarse solo de un problema de la conexión y no del nodo en sí. Se corrigió el manejo de la desconexión de un agente para que únicamente limpie el identificador de conexión de su entrada en \texttt{agent\_table}, sin eliminarla ni tocar su temporizador de anuncios, dejando que sea exclusivamente el vencimiento de ese temporizador el que determine si un nodo se considera caído. Además, se detectó que al actualizar los recursos de un nodo ya conocido no se actualizaba también la cantidad de recursos de la entrada, quedando desincronizada de la cantidad de valores efectivamente copiados si esa cantidad cambiaba entre un anuncio y otro. Se corrigió para que ambos datos se actualicen siempre juntos.
 
+\paragraph{Consideraciones para el test contra deadlock}
+
+El tiempo de espera entre cada job request debe ser menor o igual al tiempo de espera que Erlang utiliza como timeout en caso de detección de deadlock, de otro modo todos los jobs alcanzarán el timeout.
+
 \section{Estrategia contra deadlock}
 
-% Esto claramente se puede escribir mucho mas corto
 \begin{itemize}
-\item \textbf{Manejo de esperas prolongadas, supervisión y liberación controlada de
-recursos}. Se implementó un mecanismo de recuperación ante situaciones en las que un job permanece esperando recursos durante un tiempo excesivo. La detección de estas situaciones se realiza desde el scheduler implementado en Erlang, donde cada job es ejecutado por un proceso independiente que monitorea el tiempo transcurrido mientras espera una respuesta del agente C, utilizando un timeout configurable.
-
-Si dicho tiempo expira antes de recibir una respuesta satisfactoria, el sistema interpreta la situación como un posible deadlock o una condición de espera anormalmente larga. En ese caso, el proceso encargado del job registra el evento en el archivo de logs, envía un comando \texttt{JOB\_RELEASE} al agente C para liberar cualquier recurso que hubiese sido concedido parcialmente y restaura en la tabla ETS del scheduler los recursos que habían sido reservados localmente al construir la solicitud. De esta manera, tanto el agente C como el estado local del scheduler recuperan los recursos reservados, evitando inconsistencias y permitiendo que nuevos jobs puedan reutilizarlos
-
-Esta estrategia unifica la supervisión de estados de espera prolongada con la liberación controlada de recursos, permitiendo detectar situaciones de posible interbloqueo, liberar recursos retenidos y garantizar el progreso del sistema. De este modo se reduce la probabilidad de deadlocks distribuidos y se evita la acumulación de recursos asignados a trabajos que no pueden completarse.
+\item \textbf{Liberación de recursos ante espera prolongada}\\
+Los procesos de Erlang que atienden jobs monitorean el tiempo transcurrido mientras esperan una respuesta del agente de C, utilizando un timeout configurable.\\
+Si se alcanza el timeout antes de recibir una respuesta, el sistema interpreta la situación como un posible deadlock y el proceso encargado del job registra el evento en el archivo de logs, envía un comando \texttt{JOB\_RELEASE} al agente C para liberar los recursos concedidos hasta el momento y restaura los mismos en su propia tabla ETS. De esta forma tanto el agente de C como el de Erlang evitan perder sus recursos sin bloquearse.
 \end{itemize}
 
 \section{Diagramas}
