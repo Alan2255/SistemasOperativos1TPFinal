@@ -360,7 +360,7 @@ static void reserve(uint64_t id, FdEntry *info, char *job_id_str, char *res, cha
             len = sprintf(reply, "DENIED %d\n", job_id);
 
             // printf("[handle_agent] mandando 'DENIED %d\\n' por el socket 0x%x.\n", job_id, info->fd);
-            printf("[->] JOB DENIED %d\n", job_id);
+            printf("[->] DENIED %d\n", job_id);
             if (send_msg(id, info, reply, len) == -1)
                 close_agent_conn(id, info);
             break;
@@ -372,7 +372,7 @@ static void reserve(uint64_t id, FdEntry *info, char *job_id_str, char *res, cha
             len = sprintf(reply, "GRANTED %d\n", job_id);
 
             // printf("[handle_agent] mandando 'GRANTED %d\\n' por el socket 0x%x.\n", job_id, info->fd);
-            printf("[->] JOB GRANTED %d\n", job_id);
+            printf("[->] GRANTED %d\n", job_id);
             if (send_msg(id, info, reply, len) == -1)
                 close_agent_conn(id, info);
 
@@ -440,7 +440,7 @@ static void release(uint64_t id, char *job_id_str, char *res, char *amount_str) 
         if (info) {
 
             // printf("[handle_agent] mandando 'GRANTED %d\\n' (encolado) por el socket 0x%x.\n", grants[i].job_id, info->fd);
-            printf("[->] JOB GRANTED %d\n", grants[i].job_id);
+            printf("[->] GRANTED %d\n", grants[i].job_id);
             if (send_msg(grants[i].src_id, info, reply, len) == -1)
                 close_agent_conn(grants[i].src_id, info);
             fd_table_dec_and_release(info);
@@ -673,6 +673,7 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
                     close_agent_conn(agent_id, agent_info);
                 }
                 fd_table_dec_and_release(agent_info);
+                printf("[->] RESERVE %s %s %d\n", job_id, res, amount);
             }
         }
         sleep(time_per_request);

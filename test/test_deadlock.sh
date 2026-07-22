@@ -135,8 +135,9 @@ PID_AGENTE_B=$!
 PIDS+=("$PID_AGENTE_B")
 echo "  Nodo B en puerto $PUERTO_B (PID $PID_AGENTE_B) -> $RECURSOS_B"
 
-echo "  Esperando descubrimiento UDP entre nodos (4s)..."
-sleep 10
+echo "  Esperando descubrimiento UDP entre nodos (8s)..."
+#########################################################
+sleep 8
 
 if ! kill -0 "$PID_AGENTE_A" 2>/dev/null; then
     echo "ERROR: el agente A murió al iniciar. Ver $LOGS_DIR/agente_A.log"
@@ -153,7 +154,8 @@ fi
 echo "=== [4/5] Levantando schedulers e inyectando Job1 y Job2 ==="
 
 JOBTIME=1
-TIMEOUT=20
+TIMEOUT_A=2
+TIMEOUT_B=3
 
 JOB1="$LOCAL_IP:$PUERTO_A:cpu:2 $LOCAL_IP:$PUERTO_B:gpu:1"
 JOB2="$LOCAL_IP:$PUERTO_B:gpu:1 $LOCAL_IP:$PUERTO_A:cpu:2"
@@ -161,9 +163,9 @@ JOB2="$LOCAL_IP:$PUERTO_B:gpu:1 $LOCAL_IP:$PUERTO_A:cpu:2"
 (
     cd erlang || exit 1
     erl -noshell -pa . \
-        -eval "compile:file(main), compile:file(parser), compile:file(system_init), compile:file(tcp_connection), compile:file(job_manager), \
-                main:server(manual, 0, $PUERTO_A, $JOBTIME, $TIMEOUT), timer:sleep(1000), cliente_pid ! {\"$JOB1\"}, timer:sleep(9000)" \
-        -s init stop
+        -eval "compile:file(main), compile:file(parser), compile:file(system_init), compile:file(tcp_connection), compile:file(job_manager), timer:sleep(1000), main:server(manual, 0, $PUERTO_A, $JOBTIME, $TIMEOUT_A), timer:sleep(1000), cliente_pid ! {\"$JOB1\"}" \
+        -eval "timer:sleep(3000), cliente_pid ! fin, init:stop()"
+
 ) > "$LOGS_DIR/scheduler_A.log" 2>&1 &
 PID_ERL_A=$!
 PIDS+=("$PID_ERL_A")
@@ -172,15 +174,14 @@ echo "  Scheduler A (PID $PID_ERL_A) -> Job1: $JOB1"
 (
     cd erlang || exit 1
     erl -noshell -pa . \
-        -eval "compile:file(main), compile:file(parser), compile:file(system_init), compile:file(tcp_connection), compile:file(job_manager), \
-                main:server(manual, 0, $PUERTO_B, $JOBTIME, $TIMEOUT), timer:sleep(1000), cliente_pid ! {\"$JOB2\"}, timer:sleep(9000)" \
-        -s init stop
+        -eval "compile:file(main), compile:file(parser), compile:file(system_init), compile:file(tcp_connection), compile:file(job_manager), timer:sleep(1000), main:server(manual, 0, $PUERTO_B, $JOBTIME, $TIMEOUT_B), timer:sleep(1000), cliente_pid ! {\"$JOB2\"}" \
+        -eval "timer:sleep(5000), cliente_pid ! fin, init:stop()"
 ) > "$LOGS_DIR/scheduler_B.log" 2>&1 &
 PID_ERL_B=$!
 PIDS+=("$PID_ERL_B")
 echo "  Scheduler B (PID $PID_ERL_B) -> Job2: $JOB2"
 
-echo "  Esperando resolución de los jobs (8s)..."
+echo "  Esperando resolución de los jobs (20s)..."
 sleep 8
 
 # ============================================================

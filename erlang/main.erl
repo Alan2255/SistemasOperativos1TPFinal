@@ -91,9 +91,9 @@ manual_loop(Socket, TimeJob, JobTimeoutInit) -> %Asi deberia quedar el string a 
                 manual_loop(Socket, TimeJob, JobTimeoutInit);
         % Terminará cuando el usuario mande cliente_pid ! fin.
         fin ->  ok 
-    end,
-        ets:delete(pendientes),%liberamos la tabla d procesos pendientes pq ya terminamos   
-        ets:delete(recursos_nodos).
+    end.
+    %     ets:delete(pendientes),%liberamos la tabla d procesos pendientes pq ya terminamos   
+    %     ets:delete(recursos_nodos).
 
 % ===================================== MODO MANUAL =================================================
 % N sigue siendo un argumento obligatorio de server/3/client/3 (porque la firma es fija para los dos modos), 
