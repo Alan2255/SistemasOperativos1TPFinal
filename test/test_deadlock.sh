@@ -31,6 +31,9 @@ cd "$PROJECT_ROOT" || exit 1
 # ============================================================
 # 1. CONFIGURACION DEL ESCENARIO (TP §6)
 # ============================================================
+# Tiempo entre cada request
+TIME_PER_REQUEST=1
+
 # Puertos TCP de cada nodo. Deben estar entre 7000 y 15000
 # (lo valida get_port_and_resources.c).
 PUERTO_A=8100
@@ -39,8 +42,8 @@ PUERTO_B=8200
 # Recursos de cada nodo, tal cual los define el enunciado:
 #   Nodo A: 2 CPUs, 8192 MB RAM, 0 GPUs
 #   Nodo B: 2 CPUs, 4096 MB RAM, 1 GPU
-RECURSOS_A="cpu mem gpu 2 8192 0"
-RECURSOS_B="cpu mem gpu 2 4096 1"
+RECURSOS_A="cpu mem gpu 2 0 0"
+RECURSOS_B="cpu mem gpu 0 0 1"
 
 # Carpeta donde van a quedar los logs de esta corrida (no rompe nada
 # si ya existe gracias a "-p").
@@ -122,18 +125,18 @@ rm -f "$SCHEDULER_LOG"
 # ============================================================
 echo "=== [3/5] Levantando agentes C ==="
 
-./agent "$PUERTO_A" 3 $RECURSOS_A > "$LOGS_DIR/agente_A.log" 2>&1 &
+stdbuf -oL ./agent $TIME_PER_REQUEST "$PUERTO_A" 3 $RECURSOS_A > "$LOGS_DIR/agente_A.log" 2>&1 &
 PID_AGENTE_A=$!
 PIDS+=("$PID_AGENTE_A")
 echo "  Nodo A en puerto $PUERTO_A (PID $PID_AGENTE_A) -> $RECURSOS_A"
 
-./agent "$PUERTO_B" 3 $RECURSOS_B > "$LOGS_DIR/agente_B.log" 2>&1 &
+stdbuf -oL ./agent $TIME_PER_REQUEST "$PUERTO_B" 3 $RECURSOS_B > "$LOGS_DIR/agente_B.log" 2>&1 &
 PID_AGENTE_B=$!
 PIDS+=("$PID_AGENTE_B")
 echo "  Nodo B en puerto $PUERTO_B (PID $PID_AGENTE_B) -> $RECURSOS_B"
 
 echo "  Esperando descubrimiento UDP entre nodos (4s)..."
-sleep 4
+sleep 10
 
 if ! kill -0 "$PID_AGENTE_A" 2>/dev/null; then
     echo "ERROR: el agente A murió al iniciar. Ver $LOGS_DIR/agente_A.log"
@@ -149,13 +152,17 @@ fi
 # ============================================================
 echo "=== [4/5] Levantando schedulers e inyectando Job1 y Job2 ==="
 
+JOBTIME=1
+TIMEOUT=20
+
 JOB1="$LOCAL_IP:$PUERTO_A:cpu:2 $LOCAL_IP:$PUERTO_B:gpu:1"
 JOB2="$LOCAL_IP:$PUERTO_B:gpu:1 $LOCAL_IP:$PUERTO_A:cpu:2"
 
 (
     cd erlang || exit 1
     erl -noshell -pa . \
-        -eval "main:server(manual, 0, $PUERTO_A), timer:sleep(1000), cliente_pid ! {\"$JOB1\"}, timer:sleep(9000)" \
+        -eval "compile:file(main), compile:file(parser), compile:file(system_init), compile:file(tcp_connection), compile:file(job_manager), \
+                main:server(manual, 0, $PUERTO_A, $JOBTIME, $TIMEOUT), timer:sleep(1000), cliente_pid ! {\"$JOB1\"}, timer:sleep(9000)" \
         -s init stop
 ) > "$LOGS_DIR/scheduler_A.log" 2>&1 &
 PID_ERL_A=$!
@@ -165,7 +172,8 @@ echo "  Scheduler A (PID $PID_ERL_A) -> Job1: $JOB1"
 (
     cd erlang || exit 1
     erl -noshell -pa . \
-        -eval "main:server(manual, 0, $PUERTO_B), timer:sleep(1000), cliente_pid ! {\"$JOB2\"}, timer:sleep(9000)" \
+        -eval "compile:file(main), compile:file(parser), compile:file(system_init), compile:file(tcp_connection), compile:file(job_manager), \
+                main:server(manual, 0, $PUERTO_B, $JOBTIME, $TIMEOUT), timer:sleep(1000), cliente_pid ! {\"$JOB2\"}, timer:sleep(9000)" \
         -s init stop
 ) > "$LOGS_DIR/scheduler_B.log" 2>&1 &
 PID_ERL_B=$!

@@ -86,7 +86,8 @@ manual_loop(Socket, TimeJob, JobTimeoutInit) -> %Asi deberia quedar el string a 
                 Msg_REQUEST = "JOB_REQUEST" ++ " " ++ JobID ++ " " ++ Job,
                 Msg_RELEASE = "JOB_RELEASE" ++ " " ++ JobID,
                 %Pasamos 0 en CantRecusos pq no importan y ademas procesar_respuesta los ignora. 
-                spawn(job_manager, handler_job, [JobID, Job, 0, 1000 * JobTimeoutInit, Socket, Msg_REQUEST, Msg_RELEASE, [], TimeJob]), %Manda el msg al agente espera su rta y la maneja
+                JobTimeout = 1000 * JobTimeoutInit,
+                spawn(job_manager, handler_job, [JobID, Job, 0, JobTimeout, Socket, Msg_REQUEST, Msg_RELEASE, [], TimeJob]), %Manda el msg al agente espera su rta y la maneja
                 manual_loop(Socket, TimeJob, JobTimeoutInit);
         % Terminará cuando el usuario mande cliente_pid ! fin.
         fin ->  ok 
