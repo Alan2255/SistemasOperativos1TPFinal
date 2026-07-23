@@ -69,6 +69,16 @@ if [ -z "$LOCAL_IP" ]; then
 fi
 echo "IP local detectada: $LOCAL_IP"
 
+# Variables de erlang
+JOBTIME=1
+TIMEOUT_A=$((TIME_PER_REQUEST+1))
+TIMEOUT_B=$((TIMEOUT_A+1))
+SLEEPTIME=$((TIMEOUT_B * 1000))
+
+# Jobs a mandar
+JOB1="$LOCAL_IP:$PUERTO_A:cpu:2 $LOCAL_IP:$PUERTO_B:gpu:1"
+JOB2="$LOCAL_IP:$PUERTO_B:gpu:1 $LOCAL_IP:$PUERTO_A:cpu:2"
+
 # ============================================================
 # 2. LIMPIEZA / CLEANUP
 # ============================================================
@@ -83,7 +93,7 @@ cleanup() {
     for pid in "${PIDS[@]:-}"; do
         # kill -0 no mata a nadie, solo pregunta "¿este PID existe?"
         if kill -0 "$pid" 2>/dev/null; then
-            kill "$pid" 2>/dev/null                                         # SE MANDA SIGTERM 
+            kill "$pid" 2>/dev/null
         fi
     done
     # Pequeño margen para que terminen prolijo antes de matar fuerte.
@@ -154,18 +164,11 @@ fi
 # ============================================================
 echo "=== [4/5] Levantando schedulers e inyectando Job1 y Job2 ==="
 
-JOBTIME=1
-TIMEOUT_A=2
-TIMEOUT_B=3
-
-JOB1="$LOCAL_IP:$PUERTO_A:cpu:2 $LOCAL_IP:$PUERTO_B:gpu:1"
-JOB2="$LOCAL_IP:$PUERTO_B:gpu:1 $LOCAL_IP:$PUERTO_A:cpu:2"
-
 (
     cd erlang || exit 1
     erl -noshell -pa . \
         -eval "main:server(manual, 0, $PUERTO_A, $JOBTIME, $TIMEOUT_A), cliente_pid ! {\"$JOB1\"}" \
-        -eval "timer:sleep(3000), cliente_pid ! fin, init:stop()"
+        -eval "timer:sleep($SLEEPTIME), cliente_pid ! fin, init:stop()"
 
 ) > "$LOGS_DIR/scheduler_A.log" 2>&1 &
 PID_ERL_A=$!
@@ -176,14 +179,14 @@ echo "  Scheduler A (PID $PID_ERL_A) -> Job1: $JOB1"
     cd erlang || exit 1
     erl -noshell -pa . \
         -eval "main:server(manual, 0, $PUERTO_B, $JOBTIME, $TIMEOUT_B), cliente_pid ! {\"$JOB2\"}" \
-        -eval "timer:sleep(2500), cliente_pid ! fin, init:stop()"
+        -eval "timer:sleep($SLEEPTIME), cliente_pid ! fin, init:stop()"
 ) > "$LOGS_DIR/scheduler_B.log" 2>&1 &
 PID_ERL_B=$!
 PIDS+=("$PID_ERL_B")
 echo "  Scheduler B (PID $PID_ERL_B) -> Job2: $JOB2"
 
 echo "  Esperando resolución de los jobs (3s)..."
-sleep 3
+sleep $((SLEEPTIME / 1000))
 
 # ============================================================
 # 6. ANALISIS DE RESULTADOS
