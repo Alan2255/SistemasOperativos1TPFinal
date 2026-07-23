@@ -83,7 +83,7 @@ cleanup() {
     for pid in "${PIDS[@]:-}"; do
         # kill -0 no mata a nadie, solo pregunta "¿este PID existe?"
         if kill -0 "$pid" 2>/dev/null; then
-            kill "$pid" 2>/dev/null
+            kill "$pid" 2>/dev/null                                         # SE MANDA SIGTERM 
         fi
     done
     # Pequeño margen para que terminen prolijo antes de matar fuerte.
@@ -103,12 +103,12 @@ trap cleanup EXIT INT TERM
 echo "=== [1/5] Compilando agente C ==="
 gcc -ggdb3 -Wall -Wextra \
     ./c/agent.c ./c/functions/*.c ./c/structures/*.c \
-    -lpthread -o agent
+    -lpthread -o c/agent
 if [ $? -ne 0 ]; then
     echo "ERROR: no se pudo compilar el agente C."
     exit 1
 fi
-echo "OK: ./agent generado."
+echo "  Ejecutable ./agent generado en c/."
 
 echo "=== [2/5] Compilando planificador Erlang ==="
 erlc -o erlang erlang/*.erl
@@ -116,7 +116,7 @@ if [ $? -ne 0 ]; then
     echo "ERROR: no se pudo compilar el código Erlang."
     exit 1
 fi
-echo "OK: módulos .beam generados en erlang/."
+echo "  Módulos *.beam generados en erlang/."
 
 rm -f "$SCHEDULER_LOG"
 
@@ -125,19 +125,20 @@ rm -f "$SCHEDULER_LOG"
 # ============================================================
 echo "=== [3/5] Levantando agentes C ==="
 
-stdbuf -oL ./agent $TIME_PER_REQUEST "$PUERTO_A" 3 $RECURSOS_A > "$LOGS_DIR/agente_A.log" 2>&1 &
+stdbuf -oL ./c/agent $TIME_PER_REQUEST "$PUERTO_A" 3 $RECURSOS_A > "$LOGS_DIR/agente_A.log" 2>&1 &
 PID_AGENTE_A=$!
 PIDS+=("$PID_AGENTE_A")
 echo "  Nodo A en puerto $PUERTO_A (PID $PID_AGENTE_A) -> $RECURSOS_A"
 
-stdbuf -oL ./agent $TIME_PER_REQUEST "$PUERTO_B" 3 $RECURSOS_B > "$LOGS_DIR/agente_B.log" 2>&1 &
+stdbuf -oL ./c/agent $TIME_PER_REQUEST "$PUERTO_B" 3 $RECURSOS_B > "$LOGS_DIR/agente_B.log" 2>&1 &
 PID_AGENTE_B=$!
 PIDS+=("$PID_AGENTE_B")
 echo "  Nodo B en puerto $PUERTO_B (PID $PID_AGENTE_B) -> $RECURSOS_B"
 
-echo "  Esperando descubrimiento UDP entre nodos (8s)..."
-#########################################################
-sleep 8
+# Cada agente espera 2 segundos despues de mandar su primer anuncio y luego manda los siguientes cada 5 segundos,
+# entonces en el peor de los caso el agente que se inicia segundo recibe el anuncio del otro 7 segundos despues de iniciar. 
+echo "  Esperando descubrimiento UDP entre nodos (7s)..."
+sleep 7
 
 if ! kill -0 "$PID_AGENTE_A" 2>/dev/null; then
     echo "ERROR: el agente A murió al iniciar. Ver $LOGS_DIR/agente_A.log"
@@ -163,7 +164,7 @@ JOB2="$LOCAL_IP:$PUERTO_B:gpu:1 $LOCAL_IP:$PUERTO_A:cpu:2"
 (
     cd erlang || exit 1
     erl -noshell -pa . \
-        -eval "compile:file(main), compile:file(parser), compile:file(system_init), compile:file(tcp_connection), compile:file(job_manager), timer:sleep(1000), main:server(manual, 0, $PUERTO_A, $JOBTIME, $TIMEOUT_A), timer:sleep(1000), cliente_pid ! {\"$JOB1\"}" \
+        -eval "main:server(manual, 0, $PUERTO_A, $JOBTIME, $TIMEOUT_A), cliente_pid ! {\"$JOB1\"}" \
         -eval "timer:sleep(3000), cliente_pid ! fin, init:stop()"
 
 ) > "$LOGS_DIR/scheduler_A.log" 2>&1 &
@@ -174,15 +175,15 @@ echo "  Scheduler A (PID $PID_ERL_A) -> Job1: $JOB1"
 (
     cd erlang || exit 1
     erl -noshell -pa . \
-        -eval "compile:file(main), compile:file(parser), compile:file(system_init), compile:file(tcp_connection), compile:file(job_manager), timer:sleep(1000), main:server(manual, 0, $PUERTO_B, $JOBTIME, $TIMEOUT_B), timer:sleep(1000), cliente_pid ! {\"$JOB2\"}" \
-        -eval "timer:sleep(5000), cliente_pid ! fin, init:stop()"
+        -eval "main:server(manual, 0, $PUERTO_B, $JOBTIME, $TIMEOUT_B), cliente_pid ! {\"$JOB2\"}" \
+        -eval "timer:sleep(2500), cliente_pid ! fin, init:stop()"
 ) > "$LOGS_DIR/scheduler_B.log" 2>&1 &
 PID_ERL_B=$!
 PIDS+=("$PID_ERL_B")
 echo "  Scheduler B (PID $PID_ERL_B) -> Job2: $JOB2"
 
-echo "  Esperando resolución de los jobs (20s)..."
-sleep 8
+echo "  Esperando resolución de los jobs (3s)..."
+sleep 3
 
 # ============================================================
 # 6. ANALISIS DE RESULTADOS
