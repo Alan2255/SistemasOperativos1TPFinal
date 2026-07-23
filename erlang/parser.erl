@@ -19,13 +19,13 @@ parsear_un_nodo(Nodo) ->%Nodo(string)
     [Host, Puerto, "cpu", CantCPU, "mem", CantMEM, "gpu", CantGPU] = string:tokens(Nodo, ":"),
     {Host ++ ":" ++ Puerto, [list_to_integer(CantCPU), list_to_integer(CantMEM), list_to_integer(CantGPU)]}.    
 
-% Remueve el prefijo "NODES " si está presente en el string (si no está, devuelve el string sin cambios).
+% Remueve el prefijo "NODES " si esta presente en el string (si no esta, devuelve el string sin cambios).
 % Recibe: String(string) -> ej: "NODES 192.168.1.2:8100:cpu:4;..."
 % Retorna: String(string) sin el prefijo -> ej: "192.168.1.2:8100:cpu:4;..."
 parsear_lista_nodos(ListNodos) -> %ListNodos(list de strings)
     maps:from_list([parsear_un_nodo(Nodo) || Nodo <- ListNodos]).
 
-% Remueve el prefijo "NODES " si está presente en el string
+% Remueve el prefijo "NODES " si esta presente en el string
 remover_prefijo_nodes("NODES " ++ Resto) -> 
     Resto;
 remover_prefijo_nodes(String) ->

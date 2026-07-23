@@ -3,7 +3,6 @@
 #include "../consts.h"
 #include "functions.h"
 
-
 /* Inicia el timer (ya creado) con una cantidad en segundos. */
 int timer_start(int timerfd, int sec) {
     struct itimerspec ts;

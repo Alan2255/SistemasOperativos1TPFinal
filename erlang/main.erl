@@ -4,10 +4,10 @@
 
 
 % Genera N jobs con recursos aleatorios (1, 2 o 3 tipos de recurso, cantidades random),
-% mandándoselos uno por uno a pid_scheduler_job. Se llama a sí misma recursivamente
-% hasta agotar N, y al llegar a 0 avisa que no hay más jobs por generar.
+% mandandoselos uno por uno a pid_scheduler_job. Se llama a si misma recursivamente
+% hasta agotar N, y al llegar a 0 avisa que no hay mas jobs por generar.
 
-% Recibe: N(int, cuántos jobs quedan por generar)
+% Recibe: N(int, cuantos jobs quedan por generar)
 % No retorna nada relevante: envia mensajes {JobID, Job, CantRecursos} o no_hay_mas_jobs al final) al proceso 
 % registrado como pid_scheduler_job.
 generate_jobs(0) -> % cuando N es 0, termina
@@ -60,7 +60,7 @@ generate_jobs(N) ->
     generate_jobs(N-1).%Ya generamos un job restamos el N de cantidad a generar y llamamos de nuevo a la funcion.
 
 % Punto de entrada del proceso scheduler: arranca el contador de jobs activos en 0 y llama a job_manager:recibir_jobs_y_armar_peticiones, 
-% que es el loop real que corre durante toda la vida del sistema. Existe como función separada para que 
+% que es el loop real que corre durante toda la vida del sistema. Existe como funcion separada para que 
 % supervisor_scheduler_jobs pueda spawnear el proceso con spawn_link
 % Recibe: JobTimeout(int, miliseg), Socket, TimeJob(int).
 scheduler_jobs(JobTimeout, Socket, TimeJob)->
@@ -75,7 +75,7 @@ server(Modo, N, Puerto, TimeJob, JobTimeoutInit) ->
 
 % Espera que el usuario mande jobs armados a mano desde la consola, uno por uno, 
 % spawneando un handler_job por cada uno. 
-% Termina al recibir 'fin', momento en el que limpia las tablas ETS usadas durante la ejecución.
+% Termina al recibir 'fin', momento en el que limpia las tablas ETS usadas durante la ejecucion.
 % Recibe: Socket, TimeJob(int)
 manual_loop(Socket, TimeJob, JobTimeoutInit) -> %Asi deberia quedar el string a mandar a C  JOB_REQUEST 1001 192.168.1.2:cpu:2 192.168.1.3:gpu:1
     receive     
@@ -89,7 +89,7 @@ manual_loop(Socket, TimeJob, JobTimeoutInit) -> %Asi deberia quedar el string a 
                 JobTimeout = 1000 * JobTimeoutInit,
                 spawn(job_manager, handler_job, [JobID, Job, 0, JobTimeout, Socket, Msg_REQUEST, Msg_RELEASE, [], TimeJob]), %Manda el msg al agente espera su rta y la maneja
                 manual_loop(Socket, TimeJob, JobTimeoutInit);
-        % Terminará cuando el usuario mande cliente_pid ! fin.
+        % Terminara cuando el usuario mande cliente_pid ! fin.
         fin ->  ok 
     end.
     %     ets:delete(pendientes),%liberamos la tabla d procesos pendientes pq ya terminamos   
@@ -97,15 +97,15 @@ manual_loop(Socket, TimeJob, JobTimeoutInit) -> %Asi deberia quedar el string a 
 
 % ===================================== MODO MANUAL =================================================
 % N sigue siendo un argumento obligatorio de server/3/client/3 (porque la firma es fija para los dos modos), 
-% pero en modo manual no se usa para nada, así que se puede pasar cualquier valor, típicamente 0.
+% pero en modo manual no se usa para nada, asi que se puede pasar cualquier valor, tipicamente 0.
 
 
-% Inicializa el sistema completo y según el Modo, arranca la generación automática
+% Inicializa el sistema completo y segun el Modo, arranca la generacion automatica
 % de N jobs (random) o el loop de carga manual (manual). Al terminar, limpia las
-% tablas ETS usadas durante la ejecución.
+% tablas ETS usadas durante la ejecucion.
 
 % Recibe: Modo(atomo: random|manual), N(int, cantidad de jobs en modo random), Puerto(int), TimeJob(int), JobTimeoutInit(int).
-% Corre hasta que la ejecución completa termine (fin en modo random, o 'fin' recibido en manual_loop en modo manual).
+% Corre hasta que la ejecucion completa termine (fin en modo random, o 'fin' recibido en manual_loop en modo manual).
 client(Modo, N, Puerto, TimeJob, JobTimeoutInit) ->
     
     Socket = system_init:inicializar_sistema(Puerto, TimeJob, JobTimeoutInit), %Inicializar sistema, retorna el socket

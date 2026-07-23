@@ -4,8 +4,7 @@
 #include <inttypes.h>
 #include "reservation_table.h"
 
-
-// Función hash
+// Funcion hash
 static void make_key(int job_id, uint64_t src_id, const char* res_name, char *out_key, size_t max_len) {
     snprintf(out_key, max_len, "%d:%" PRIu64 ":%s", job_id, src_id, res_name);
 }
@@ -104,7 +103,7 @@ void reservation_table_release_by_id(uint64_t src_id) {
     for (int i = 0; i < reservation_table->used; i++) {
         reservation_t* reserva = (reservation_t*)reservation_table->entries[i].value;
 
-        // Si la entrada tiene una reserva válida y coincide con la conexion
+        // Si la entrada tiene una reserva valida y coincide con la conexion
         if (reserva != NULL && reserva->src_id == src_id) {
 
             // Generamos la clave para eliminar la entrada de la tabla hash correctamente

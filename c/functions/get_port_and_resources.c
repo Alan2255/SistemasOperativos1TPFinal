@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "functions.h"
 
-/* Obtiene el puerto (se lo asigna a 'puerto_tcp) y los recursos (los guarda en los parametros) desde la linea de comandos. 
+/* Obtiene el puerto, el tiempo entre request, y los recursos (los guarda en los parametros) desde la linea de comandos. 
 En caso de error por formato, imprime indicando el formato y devuelve -1. */
 int get_port_and_resources(int argc, char **argv, int *num_resources, char **resource_names, int *capacities) {
     if (argv == NULL || num_resources == NULL || resource_names == NULL || capacities == NULL)

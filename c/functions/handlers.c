@@ -524,23 +524,23 @@ void handle_agent(uint64_t id, FdEntry* info) {
                 ;
             }
 
-            // Avanzamos el puntero de lectura al siguiente caracter después del '\n'
+            // Avanzamos el puntero de lectura al siguiente caracter despues del '\n'
             read_ptr = end_of_command + 1;
         }
 
         // Reiniciamos el buffer
-        int bytes_procesados = read_ptr - data->buf_in;
+        int processed_bytes = read_ptr - data->buf_in;
 
-        if (bytes_procesados >= data->len_buf_in) {
-            // Si procesamos todo hasta el final (terminó en \n), RESETEAMOS A 0
+        if (processed_bytes >= data->len_buf_in) {
+            // Si procesamos todo hasta el final (termino en \n), reseteamos a 0
             data->len_buf_in = 0;
             data->buf_in[0] = '\0';
             // printf("Buffer completamente procesado y reseteado a 0.\n");
         } 
-        else if (bytes_procesados > 0) {
-            // Si quedó un mensaje a la mitad (no alcanzó a tener \n), nos traemos solo ese pedazo al inicio
-            memmove(data->buf_in, read_ptr, data->len_buf_in - bytes_procesados);
-            data->len_buf_in -= bytes_procesados;
+        else if (processed_bytes > 0) {
+            // Si quedo un mensaje a la mitad (no alcanzo a tener \n), nos traemos solo ese pedazo al inicio
+            memmove(data->buf_in, read_ptr, data->len_buf_in - processed_bytes);
+            data->len_buf_in -= processed_bytes;
             data->buf_in[data->len_buf_in] = '\0';
         }
     }
@@ -676,7 +676,12 @@ static void job_request(FdEntry *info, char *job_id, char *reqs_str) {
                 printf("[->] RESERVE %s %s %d\n", job_id, res, amount);
             }
         }
-        sleep(time_per_request);
+
+        if (time_per_request == 0) {
+        }
+        else {
+            sleep(time_per_request);
+        }
     }
 
     if (regret) {
@@ -806,7 +811,6 @@ int handle_scheduler(uint64_t id, FdEntry *info) {
             }
             else {
                 // printf("[handle_scheduer] invalid request.\n");
-                ;
             }
 
             // Avanzamos el puntero de lectura

@@ -8,24 +8,24 @@ indice_recurso("gpu") -> 3.
 % El 2 en ets:update_counter significa modifica el 2ndo elemento de la tupla, basicamente q modifican el valor y no la clave
 % ets:update_counter siempre suma, si queremos restar le pasamos un num negativo 
 
-% Devuelve {Tomado, FaltaPedir} -> cuánto se tomó realmente, y cuánto queda pendiente.
+% Devuelve {Tomado, FaltaPedir} -> cuanto se tomo realmente, y cuanto queda pendiente.
 % Recibe la ip del nodo, el indice(cpu,mem o gpu) y la cantidad que debe tomar.
 % Recibe: Host(string), Indice(int), Cantidad(int).
 % Retorna: {Tomado(int), FaltaPedir(int)} 
-% Tomado: cuánto se descontó realmente de la tabla ETS (puede ser igual a Cantidad si alcanzaba,
-% o menor si el nodo no tenía suficiente.
-% FaltaPedir: cuánto quedó sin poder tomarse (0 si alcanzó completo, un valor positivo si no alcanzó).
+% Tomado: cuanto se desconto realmente de la tabla ETS (puede ser igual a Cantidad si alcanzaba,
+% o menor si el nodo no tenia suficiente.
+% FaltaPedir: cuanto quedo sin poder tomarse (0 si alcanzo completo, un valor positivo si no alcanzo).
 tomar_de_nodo(Host, Indice, Cantidad) ->
     Key = {Host, Indice},
-    % Accede con la key al valor del recurso de ese nodo en la ets y resta la cantidad que desea tomar, la fun es atómica.
+    % Accede con la key al valor del recurso de ese nodo en la ets y resta la cantidad que desea tomar, la fun es atomica.
     NuevoValor = ets:update_counter(recursos_nodos, Key, {2, -Cantidad}),
     case NuevoValor >= 0 of
-        % Si el resultado queda >= 0: el nodo tenía suficiente, tomamos Cantidad completa.
+        % Si el resultado queda >= 0: el nodo tenia suficiente, tomamos Cantidad completa.
         true -> 
-            {Cantidad, 0}; % Alcanzó completo, no queda nada pendiente
+            {Cantidad, 0}; % Alcanzo completo, no queda nada pendiente
 
-        % Si el resultado queda < 0: el nodo no alcanzaba. Tomamos solo lo que tenía(el valor original), y reponemos 
-        % el excedente que restamos de más para dejar el contador en 0 (nunca negativo).
+        % Si el resultado queda < 0: el nodo no alcanzaba. Tomamos solo lo que tenia(el valor original), y reponemos 
+        % el excedente que restamos de mas para dejar el contador en 0 (nunca negativo).
         false ->  
             % Ej: Recurso = 3, Cantidad(pedida) = 5 -> NuevoValor = -2.
             % Entonces lo que tomamos es 3, que es igual a Tomado = Cantidad + nuevoValor (Tomado = 5 + (-2)).
@@ -36,14 +36,14 @@ tomar_de_nodo(Host, Indice, Cantidad) ->
             {Tomado, Cantidad - Tomado}
     end.
 
-% Función que accede a la cantidad del host con la key {Host, Indice} y repone la cantidad que había sido tomada.
+% Funcion que accede a la cantidad del host con la key {Host, Indice} y repone la cantidad que habia sido tomada.
 % Devuelve una Cantidad a un nodo (usado al revertir por JOB_DENIED/timeout).
 % Recibe: Host(string), Indice(int), Cantidad(int)
 devolver_a_nodo(Host, Indice, Cantidad) ->
     ets:update_counter(recursos_nodos, {Host, Indice}, {2, Cantidad}). % 2 significa que modifica 2ndo elem de la tupla(la cant)
 
 % Reparte Cantidad de un recurso entre la lista de nodos (en orden), tomando de a uno
-% de forma atómica(via tomar_de_nodo). El ultimo nodo de la lista se le PIDE todo lo que quede pendiente,
+% de forma atomica(via tomar_de_nodo). El ultimo nodo de la lista se le PIDE todo lo que quede pendiente,
 % se le acepte o no (si no alcanza, tomar_de_nodo queda en 0 y devuelve lo real tomado).
 
 % Recibe: Indice(int), Restante(int), Nodos(List de Hosts), Recurso(string).
@@ -51,29 +51,29 @@ devolver_a_nodo(Host, Indice, Cantidad) ->
 % ListaPedidos: [{Host(string), CantidadPedida(int)}, ...] -> para armar el mensaje al agente C.
 % ListaDescuentos: [{Host(string), Recurso(string), CantidadTomadaReal(int)} ... ] -> para poder devolver despues.
 
-% Caso base: ya no queda nada por repartir (se completó el pedido con nodos anteriores).
-% Corta la recursión sin agregar ningún nodo más a ninguna de las dos listas.
+% Caso base: ya no queda nada por repartir (se completo el pedido con nodos anteriores).
+% Corta la recursion sin agregar ningun nodo mas a ninguna de las dos listas.
 repartir_entre_nodos(_Indice, 0, _Nodos, _Recurso) -> 
     {[], []};
 
-% Caso último nodo: queda un solo nodo en la lista y todavía falta repartir Restante.
+% Caso ultimo nodo: queda un solo nodo en la lista y todavia falta repartir Restante.
 % A este nodo se le pide TODO lo que falta (Restante), tenga o no esa cantidad disponible.
 repartir_entre_nodos(Indice, Restante, [Host], Recurso) ->
-    % Tomado (lo que tomó de verdad), Sobra (lo que quedo sin poder tomarse)
+    % Tomado (lo que tomo de verdad), Sobra (lo que quedo sin poder tomarse)
     {Tomado, _Sobra} = tomar_de_nodo(Host, Indice, Restante),
     % Usamos Restante no tomado, pq el ultimo nodo pide todo lo q falta aunque no alcance, luego C hara JOB_DENIED.
     % La segunda lista si usa Tomado (lo que realmente se reto de la tabla) para tener en cuenta cuanto reponer de la ets cuando recibamos JOB_DENIED.
     {[{Host, Restante}], [{Host, Recurso, Tomado}]};
 
-% Caso general: quedan 2 o más nodos y todavía falta repartir CantidadRestante.
-% A este nodo se le toma como máximo lo que tiene disponible (tomar_de_nodo se encarga
-% de no pasarse), y lo que no se pudo tomar acá (Sobra) se sigue repartiendo entre el resto.
+% Caso general: quedan 2 o mas nodos y todavia falta repartir CantidadRestante.
+% A este nodo se le toma como maximo lo que tiene disponible (tomar_de_nodo se encarga
+% de no pasarse), y lo que no se pudo tomar aca (Sobra) se sigue repartiendo entre el resto.
 repartir_entre_nodos(Indice, CantidadRestante, [Host | Resto], Recurso) -> 
-    % Tomado (lo que tomó de verdad), Sobra (lo que quedo sin poder tomarse).
+    % Tomado (lo que tomo de verdad), Sobra (lo que quedo sin poder tomarse).
     {Tomado, Sobra} = tomar_de_nodo(Host, Indice, CantidadRestante),
     case Tomado of
         0 -> 
-            %% este nodo no tenía nada, seguimos con el resto sin agregarlo
+            %% este nodo no tenia nada, seguimos con el resto sin agregarlo
             repartir_entre_nodos(Indice, CantidadRestante, Resto, Recurso);
         _ ->
             {ListaResto, DescuentosResto} = repartir_entre_nodos(Indice, Sobra, Resto, Recurso),
@@ -84,7 +84,7 @@ repartir_entre_nodos(Indice, CantidadRestante, [Host | Resto], Recurso) ->
 
 % Dado un Recurso ("cpu","mem" o "gpu") y una Cantidad a pedir, recorre los nodos (en el orden guardado en orden_nodos) 
 % y reparte esa Cantidad entre ellos, descontando de la tabla ETS a medida que toma.
-% El último nodo recibe todo lo que quede pendiente, alcance o no.
+% El ultimo nodo recibe todo lo que quede pendiente, alcance o no.
 
 % Recibe: Recurso(string), Cantidad(int).
 % Retorna: {ListPedidos, ListDescuentos}
@@ -97,7 +97,7 @@ elegir_nodos(Recurso, Cantidad) ->
     repartir_entre_nodos(Indice, Cantidad, Nodos, Recurso).
 
 % Maneja el ciclo de vida completo de UN job ya armado.
-% Guarda el job en 'pendientes' (junto con quién lo maneja y qué se le descontó a cada nodo, para poder revertir si hace falta),
+% Guarda el job en 'pendientes' (junto con quien lo maneja y que se le desconto a cada nodo, para poder revertir si hace falta),
 % manda el JOB_REQUEST al agente C por TCP, y queda esperando su respuesta (delegado en procesar_respuesta).
 % Se spawnea SIN LINK: si este proceso muere, no afecta al resto del sistema ya que cada job es independiente.
 
@@ -109,7 +109,7 @@ handler_job(JobID, Job, CantRecursos, JobTimeout, Socket, Msg_REQUEST, Msg_RELEA
     gen_tcp:send(Socket, list_to_binary(Msg_REQUEST)),
     procesar_respuesta(JobID, Job, CantRecursos, Socket, Msg_RELEASE, JobTimeout, Descuentos, TimeJob).
 
-% Devuelve a cada nodo lo que realmente se le había tomado, de forma atómica.
+% Devuelve a cada nodo lo que realmente se le habia tomado, de forma atomica.
 % Recibe: Descuentos(List de tuplas).
 revertir_descuentos(Descuentos) ->
     lists:foreach(fun({Host, Recurso, Cantidad}) ->
@@ -133,13 +133,13 @@ procesar_respuesta(JobID, Job, _CantRecursos, Socket, Msg_RELEASE, JobTimeout, D
                     timer:sleep(1000 * TimeJob),
                     io:format("Trabajo finalizado!~n"),
                     gen_tcp:send(Socket, list_to_binary(Msg_RELEASE)),
-                    % Devolvemos lo que habíamos descontado
+                    % Devolvemos lo que habiamos descontado
                     revertir_descuentos(Descuentos),
                     pid_scheduler_job ! {job_terminado, JobID};
                    
 
                 "JOB_DENIED " ++ _Rest -> 
-                    %Devolvemos lo que habíamos descontado
+                    %Devolvemos lo que habiamos descontado
                     revertir_descuentos(Descuentos),
                     borrarPendiente_and_registrarLog(JobID, Job, "JOB_DENIED"),
                     pid_scheduler_job ! {job_terminado, JobID};
@@ -147,7 +147,7 @@ procesar_respuesta(JobID, Job, _CantRecursos, Socket, Msg_RELEASE, JobTimeout, D
                 
                 Invalido ->
                     io:format("Formato de mensaje no esperado por el handler: ~p~n", [Invalido]),
-                    %Devolvemos lo que habíamos descontado
+                    %Devolvemos lo que habiamos descontado
                     revertir_descuentos(Descuentos),
                     pid_scheduler_job ! {job_terminado, JobID}
                 
@@ -164,7 +164,7 @@ procesar_respuesta(JobID, Job, _CantRecursos, Socket, Msg_RELEASE, JobTimeout, D
 % Esta funcion es llamada por scheduler_jobs, puede recibir 3 mensajes diferentes:  
 % - no_hay_mas_jobs enviado por generate_jobs cuando en modo random ya termino de generar todos los jobs, solo queda esperar a que terminen,
 %   llama a la funcion wait_jobs para que espere a que terminen todos los jobs activos.
-% - {job_terminado, _JobID} enviador por el proceso handler_job en la llamada de la funcion procesar_respuesta, significa que un job terminó,
+% - {job_terminado, _JobID} enviador por el proceso handler_job en la llamada de la funcion procesar_respuesta, significa que un job termino,
 %   llama a la funcion recursivamente restando en 1 los jobs activos.
 % - {JobID(int), Job(string), CantRecursos(int)} enviado por generate_jobs, en este caso arma las peticiones,
 %   crea un proceso (conectado al mismo agente) que atienda el job (handler_job) y vuelve a llamarse recurisvamente, incrementando en 1 los jobs activos.
@@ -185,7 +185,7 @@ recibir_jobs_y_armar_peticiones(Socket, JobTimeout, JobsActivos, TimeJob) ->
     end.
 
 % Recibe el nombre del recurso, "cpu", "mem", o "gpu", la cantidad de este, arma el string con el PEDIDO 
-% de un recurso a distintos(o unico) nodo y devuelve también los descuentos  reales aplicados.
+% de un recurso a distintos(o unico) nodo y devuelve tambien los descuentos  reales aplicados.
 % Recibe: Recurso(string), Cant(string).
 % Retorna : {String, Lista de tuplas con la forma: {Host(string), Recurso(string), CantidadTomadaReal(int)} }.
 armar_msg(Recurso, Cant) -> 
@@ -233,7 +233,7 @@ armar_peticiones(JobID, Job, CantRecursos) ->
 
 %=============================================== WAIT / LOGS ===================================================
 
-% Cuando ya no quedan jobs activos (JobsActivos llegó a 0), avisa a cliente_pid que todo terminó.
+% Cuando ya no quedan jobs activos (JobsActivos llego a 0), avisa a cliente_pid que todo termino.
 wait_jobs(0) ->
     io:format("Todos los jobs finalizaron~n"),
     cliente_pid ! fin,

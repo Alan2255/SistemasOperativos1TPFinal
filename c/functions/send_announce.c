@@ -10,21 +10,15 @@ void send_announce() {
     
     local_resources_to_str(buf_resources);
     
-    /* 1. CORRECCIÓN: snprintf evita desbordar buf si buf_resources es muy grande */
-    int bytes_written = snprintf(buf, sizeof(buf), "ANNOUNCE %d %s", puerto_tcp, buf_resources);
-    if (bytes_written >= (int)sizeof(buf)) {
-        fprintf(stderr, "Advertencia: El anuncio fue truncado por falta de espacio en TAM_BUF\n");
-    }
+    snprintf(buf, sizeof(buf), "ANNOUNCE %d %s", puerto_tcp, buf_resources);
 
     struct sockaddr_in dest;
-    /* 2. CORRECCIÓN CRÍTICA: Limpiamos la estructura para eliminar basura de la memoria */
     memset(&dest, 0, sizeof(dest));
     
     dest.sin_family = AF_INET;
     dest.sin_port = htons(PUERTO_UDP);
-    dest.sin_addr.s_addr = htonl(INADDR_BROADCAST); // 255.255.255.255
+    dest.sin_addr.s_addr = htonl(INADDR_BROADCAST);
 
-    /* 3. Validación de envío */
     ssize_t bytes_sent = sendto(udp_sock, buf, strlen(buf), 0, (struct sockaddr*)&dest, sizeof(dest));
     if (bytes_sent == -1) {
         perror("Error en sendto UDP (Broadcast)");

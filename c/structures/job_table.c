@@ -4,6 +4,7 @@
 #include <arpa/inet.h>
 #include "job_table.h"
 
+// Funcion hash
 static void make_key(int job_id, char *out_key, size_t max_len) {
     snprintf(out_key, max_len, "%d", job_id);
 }
@@ -74,7 +75,7 @@ job_table_t* job_table_get(int job_id) {
     return job;
 }
 
-// Chequea si todos los requisitos del job están concedidos
+// Chequea si todos los requisitos del job estan concedidos
 int job_table_check_granted(int job_id) {
     if (!job_table) return -2;
     
@@ -110,7 +111,7 @@ char* job_table_to_string() {
 
 
     int written = 0;
-    written += snprintf(buf + written, buf_tam - written, "{{{{{{{{{{{{{ job_table }}}}}}}}}}}}}\n");
+    written += snprintf(buf + written, buf_tam - written, "[ job_table ]\n");
 
     for (int i = 0; i < job_table->used; i++) {
         if (job_table->entries[i].value == NULL) continue;

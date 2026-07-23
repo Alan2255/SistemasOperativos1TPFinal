@@ -57,7 +57,7 @@ static Resource* find_resource(char* name) {
 
 void local_resources_init(int num_resources, char* resource_names[], int capacities[]) {
     if (resources != NULL) {
-        local_resources_shutdown();
+        return;
     }
 
     resource_count = num_resources;
@@ -79,17 +79,6 @@ void local_resources_init(int num_resources, char* resource_names[], int capacit
 
         pthread_mutex_init(&resources[i].mutex, NULL);
     }
-}
-
-void local_resources_shutdown() {
-    if (resources != NULL) {
-        for (int i = 0; i < resource_count; i++) {
-            pthread_mutex_destroy(&resources[i].mutex);
-        }
-        free(resources);
-        resources = NULL;
-    }
-    resource_count = 0;
 }
 
 // Si hay suficiente cantidad reserva los recursos, sino encola el job

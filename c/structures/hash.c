@@ -3,7 +3,7 @@
 #include <string.h>
 #include "hash.h"
 
-// Función Hash
+// Funcion Hash
 static unsigned long fun_hash(const char *str) {
     unsigned long hash = 5381;
     int c;
@@ -21,7 +21,7 @@ Hash* hash_create(void) {
     table->capacity = INITIAL_CAPACITY;
     table->used = 0;
 
-    // Inicializar la tabla hash de índices con -1
+    // Inicializar la tabla hash de indices con -1
     table->indices = malloc(table->capacity * sizeof(int));
     if (!table->indices) {
         free(table);
@@ -62,7 +62,7 @@ static void hash_resize(Hash *table) {
         new_indices[i] = -1;
     }
 
-    // Reacomodamos los índices apuntando
+    // Reacomodamos los indices apuntando
     for (int i = 0; i < table->used; i++) {
         // Ignoramos elementos borrados si los hubiera
         if (table->entries[i].key == NULL) continue;
@@ -113,7 +113,7 @@ void* hash_set(Hash *table, const char *key, void *value) {
     unsigned long h = fun_hash(key);
     size_t idx = h & (table->capacity - 1);
 
-    // Buscar si la clave ya existe en los índices
+    // Buscar si la clave ya existe en los indices
     while (table->indices[idx] != -1) {
         int entry_idx = table->indices[idx];
         if (table->entries[entry_idx].key != NULL && strcmp(table->entries[entry_idx].key, key) == 0) {
@@ -127,7 +127,7 @@ void* hash_set(Hash *table, const char *key, void *value) {
     // Si es una clave nueva, validamos el Factor de Carga (75%)
     if ((float)(table->used + 1) / table->capacity >= LOAD_FACTOR) {
         hash_resize(table);
-        // Recalcular índice tras el cambio de tamaño de la tabla
+        // Recalcular indice tras el cambio de tamaño de la tabla
         idx = h & (table->capacity - 1);
         while (table->indices[idx] != -1) {
             idx = (idx + 1) & (table->capacity - 1);
@@ -140,7 +140,7 @@ void* hash_set(Hash *table, const char *key, void *value) {
     table->entries[new_entry_idx].key = strdup(key);
     table->entries[new_entry_idx].value = value;
 
-    // Vincular el índice de la tabla hash con el array compacto
+    // Vincular el indice de la tabla hash con el array compacto
     table->indices[idx] = new_entry_idx;
     table->used++;
 
@@ -178,7 +178,7 @@ bool hash_remove(Hash *table, const char *key, void (*free_value)(void*)) {
         int entry_idx = table->indices[idx];
         if (table->entries[entry_idx].key != NULL && strcmp(table->entries[entry_idx].key, key) == 0) {
             
-            // Liberamos la clave que duplicó el hash_set
+            // Liberamos la clave que duplico el hash_set
             free(table->entries[entry_idx].key);
             table->entries[entry_idx].key = NULL;
             if (free_value && table->entries[entry_idx].value) {
@@ -186,7 +186,7 @@ bool hash_remove(Hash *table, const char *key, void (*free_value)(void*)) {
             }
             table->entries[entry_idx].value = NULL;
 
-            // Quitamos el índice actual
+            // Quitamos el indice actual
             table->indices[idx] = -1;
 
             // Rehash de la vecindad
@@ -198,8 +198,8 @@ bool hash_remove(Hash *table, const char *key, void (*free_value)(void*)) {
                 unsigned long hash_sig = table->entries[e_idx].hash;
                 size_t posicion_natural = hash_sig & (table->capacity - 1);
 
-                // Evaluamos si el elemento saltó el hueco o quedó desubicado
-                // usando aritmética modular circular
+                // Evaluamos si el elemento salto el hueco o quedo desubicado
+                // usando aritmetica modular circular
                 bool debe_moverse = false;
                 if (vacio <= siguiente) {
                     if (posicion_natural <= vacio || posicion_natural > siguiente) debe_moverse = true;

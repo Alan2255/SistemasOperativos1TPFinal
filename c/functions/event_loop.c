@@ -19,7 +19,6 @@ void* event_loop(void*) {
         for (n = 0; n < nfds; ++n) {
             uint64_t id = events[n].data.u64;
             FdEntry* info = fd_table_get_and_inc(id);
-            // printf("[event_loop] 0x%016" PRIx64 ", info=%p\n", id, info);
             if (info == NULL) {
                 continue;
             }

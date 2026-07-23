@@ -46,7 +46,7 @@ job_table_t* job_table_extract(int job_id);
 // un arreglo dinamico con los jobs y terminado en NULL.
 job_table_t** job_table_extract_all();
 
-// Chequea si todos los requisitos del job están concedidos
+// Chequea si todos los requisitos del job estan concedidos
 int job_table_check_granted(int job_id);
 
 // Incrementa la cantidad de pedidos concedidos del job

@@ -9,11 +9,12 @@
 
 Hash *fd_table = NULL;
 
+// Funcion hash.
 static void make_key(int fd, char *out, size_t max_len) {
     snprintf(out, max_len, "%d", fd);
 }
 
-// Libera la entrada (pone el fd en -1 y libera la memoria de data)
+// Libera la entrada (pone el fd en -1 y libera la memoria de data).
 static void release_entry(FdEntry *entry) {
     if (!entry)
         return;

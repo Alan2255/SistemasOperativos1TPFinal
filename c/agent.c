@@ -41,7 +41,7 @@ uint64_t scheduler_id = UINT64_MAX;
 int time_per_request = 0;
 
 int main(int argc, char* argv[]) {
-    /* Obtenemos y seteamos: el puerto y los recursos locales*/
+    // Obtenemos y seteamos: el puerto y los recursos locales
     int num_resources = MAX_RESOURCES_AGENT;
     char* resource_names[MAX_RESOURCES_AGENT];
     int capacities[MAX_RESOURCES_AGENT];
@@ -49,20 +49,20 @@ int main(int argc, char* argv[]) {
         return -1;
     local_resources_init(num_resources, resource_names, capacities);
 
-    /* Iniciamos la instancia epoll */
+    // Iniciamos la instancia epoll 
     epollfd = epoll_create1(0);
     if (epollfd == -1) {
         perror("epoll_create1");
         return -1;
     }
 
-    /* Iniciamos las tablas */
+    // Iniciamos las tablas
     agent_table_init();
     job_table_init();
     reservation_table_init();
     fd_table_init();
 
-    /* Iniciamos los sockets */
+    // Iniciamos los sockets
     int scheduler_listen_sock = init_scheduler_listen_sock();
     int agents_listen_sock = init_agents_listen_sock();
     udp_sock = init_udp_sock();
@@ -73,20 +73,25 @@ int main(int argc, char* argv[]) {
         return -1;
     }  
 
-    /* Mandamos el anuncio y esperamos 2 segundos */ 
+    // Mandamos el anuncio y esperamos 2 segundos 
     send_announce();
     sleep(2);
 
-    /* Seteamos un timer y lo agregamos a epoll para enviar el proximo anuncio */
+    // Seteamos un timer y lo agregamos a epoll para enviar el proximo anuncio
     if (init_announce_timer() == -1)
         return -1;
 
-    /* Iniciamos los threads */
+    // Iniciamos los threads
     pthread_t threads[N_THREADS];
     for (int i = 0; i < N_THREADS; i++)
         pthread_create(&threads[i], NULL, event_loop, NULL);
 
-    pthread_join(threads[0], NULL);
+    // Esperamos a los threads
+    for (int i = 0; i < N_THREADS; i++) {
+        pthread_join(threads[i], NULL);
+    }
+
+    return 0;
 }
 
 

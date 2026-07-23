@@ -3,12 +3,12 @@
 #include <string.h>
 #include "agent_table.h"
 
-
+// Funcion hash.
 static void make_key(const char *ip, const char *port, char *buf, size_t bufsize) {
     snprintf(buf, bufsize, "%s:%s", ip, port);
 }
 
-// Crea la tabla de agentes
+// Crea la tabla de agentes.
 void agent_table_init() {
     if (agent_table == NULL) {
         agent_table = hash_create();
@@ -48,7 +48,7 @@ static AgentNode* make_agent(char* ip, char* port, int count_resources, Resource
     return new_node;
 }
 
-// Agrega un agente a la tabla
+// Agrega un agente a la tabla.
 void agent_table_add(char* ip, char* port, int count_resources, Resource* resources, int timerfd) {
     if (!agent_table) return;
     
@@ -96,7 +96,7 @@ int agent_table_get_id(char* ip, char* port, uint64_t* id) {
     return 1;
 }
 
-// Busca un agente por su ip y puerto y actualiza el identificador de su conexion
+// Busca un agente por su ip y puerto y actualiza el identificador de su conexion.
 void agent_table_set_id(const char *ip, const char *port, uint64_t id) {
     if (!agent_table) return;
 
@@ -117,7 +117,7 @@ void agent_table_set_id(const char *ip, const char *port, uint64_t id) {
     pthread_mutex_unlock(&(agent_table->mutex));
 }
 
-// Busca el agente con el identificador dado y reinicia su id (UINT64_MAX)
+// Busca el agente con el identificador dado y reinicia su id (UINT64_MAX).
 void agent_table_clear_id(uint64_t id) {
     if (!agent_table || id == UINT64_MAX) return;
 
@@ -136,7 +136,7 @@ void agent_table_clear_id(uint64_t id) {
     pthread_mutex_unlock(&(agent_table->mutex));
 }
 
-// Busca un agente por su ip y puerto y actualiza sus recursos
+// Busca un agente por su ip y puerto y actualiza sus recursos.
 void agent_table_update(char* ip, char* port, Resource* resources, int count_resources) {
     if (!agent_table || resources == NULL) return;
 
@@ -191,7 +191,7 @@ int agent_table_get_timerfd(const char *ip, const char *port) {
     return timer_fd;
 }
 
-// Busca un agente por su ip y puerto y actualiza su timerfd
+// Busca un agente por su ip y puerto y actualiza su timerfd.
 void agent_table_set_timerfd(const char *ip, const char *port, int newTimerfd) {
     if (!agent_table) return;
 
@@ -212,7 +212,7 @@ void agent_table_set_timerfd(const char *ip, const char *port, int newTimerfd) {
     pthread_mutex_unlock(&(agent_table->mutex));
 }
 
-// Elimina un agente
+// Elimina un agente.
 void agent_table_delete(const char *ip, const char *port) {
     if (!agent_table) return;
 
@@ -225,7 +225,7 @@ void agent_table_delete(const char *ip, const char *port) {
     pthread_mutex_unlock(&(agent_table->mutex));
 }
 
-// Busca un agente por el identificador de su conexion y copia su ip y puerto
+// Busca un agente por el identificador de su conexion y copia su ip y puerto.
 int agent_table_get_addr_by_id(uint64_t id, char* ip, char* port) {
     if (!agent_table || !ip || !port || id == UINT64_MAX) return -1;
 
@@ -247,7 +247,7 @@ int agent_table_get_addr_by_id(uint64_t id, char* ip, char* port) {
     return -1;
 }
 
-// Convierte la tabla de agentes en un string con las capacidades de los recursos
+// Convierte la tabla de agentes en un string con las capacidades de los recursos.
 char* agent_table_get_nodes() {
     if (!agent_table || agent_table->used == 0) {
         char *vacio = malloc(6); 
