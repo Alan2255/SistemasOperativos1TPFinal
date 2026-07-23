@@ -22,16 +22,16 @@ tomar_de_nodo(Host, Indice, Cantidad) ->
     case NuevoValor >= 0 of
         % Si el resultado queda >= 0: el nodo tenía suficiente, tomamos Cantidad completa.
         true -> 
-            {Cantidad, 0};  % Alcanzó completo, no queda nada pendiente
+            {Cantidad, 0}; % Alcanzó completo, no queda nada pendiente
 
         % Si el resultado queda < 0: el nodo no alcanzaba. Tomamos solo lo que tenía(el valor original), y reponemos 
         % el excedente que restamos de más para dejar el contador en 0 (nunca negativo).
         false ->  
             % Ej: Recurso = 3, Cantidad(pedida) = 5 -> NuevoValor = -2.
             % Entonces lo que tomamos es 3, que es igual a Tomado = Cantidad + nuevoValor (Tomado = 5 + (-2)).
-            Tomado = Cantidad + NuevoValor,
+            Tomado = Cantidad + NuevoValor, % NuevoValor es negativo!
             % Repone el excedente para dejar el contador en 0 (no negativo).
-            ets:update_counter(recursos_nodos, Key, {2, -NuevoValor}),
+            ets:update_counter(recursos_nodos, Key, {2, -NuevoValor}), % (-)NuevoValor pues recordemos que es negativo y queremos sumar.
             % Retornamos cuanto se tomo realmente (para luego reponerlo) y cuanto falta pedir
             {Tomado, Cantidad - Tomado}
     end.

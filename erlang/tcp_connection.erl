@@ -29,7 +29,7 @@ tcp_deliver(Socket) ->
         {ok, Data} -> 
             io:format("~p~n", [Data]),
             Str = binary_to_list(Data),
-            % Separa el mensaje por espacios para obtener el JobID.
+            % Guarda lo separado por espacios en una lista para obtener el JobID, EJ: "JOB_GRANTED 1234 OK" -> ["JOB_GRANTED", "1234", "OK"]
             case string:tokens(Str, " ") of
                 [_Comando, JobID | _Resto] ->
                     % Busca el JobID en la tabla ETS de trabajos pendientes.

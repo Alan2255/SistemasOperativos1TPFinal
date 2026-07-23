@@ -80,13 +80,13 @@ request_map_nodes_initial(Socket) ->
 
 % Recibe: MapNodos (map de Host => [CantCPU, CantMEM, CantGPU])
 cargar_tabla_recursos(MapNodos) ->
-    ListNodos = maps:to_list(MapNodos),
+    ListNodos = maps:to_list(MapNodos), %  -> {Host, [Cpu, Mem, Gpu]}
     lists:foreach(fun({Host, [Cpu, Mem, Gpu]}) ->
         ets:insert(recursos_nodos, {{Host, 1}, Cpu}),
         ets:insert(recursos_nodos, {{Host, 2}, Mem}),
         ets:insert(recursos_nodos, {{Host, 3}, Gpu})
     end, ListNodos),
-    OrdenNodos = [Host || {Host, _} <- ListNodos],
+    OrdenNodos = [Host || {Host, _} <- ListNodos], 
     % Insertamos ahora en la tabla orden_nodos que es una lista con los nodos disponibles
     ets:insert(recursos_nodos, {orden_nodos, OrdenNodos}).
 
@@ -101,7 +101,9 @@ inicializar_sistema(Puerto, TimeJob, JobTimeoutInit) ->
     % Nos conectamos al agente de C
     {ok, Socket} = tcp_connection:connect_agent(Puerto),
     io:format("Conectado al servidor~n"),
-    ets:new(pendientes, [named_table, public, set]),
+    % En ets tipo set, siempre la key es el primer elemento la tupla, con la key obtenes toda la tupla.
+    % Tendra la forma {JobID, Job, self(), Descuentos}, key: JobID.
+    ets:new(pendientes, [named_table, public, set]), 
     ets:new(recursos_nodos, [named_table, public, set]), 
 
     % Pedimos el mapa de nodos DIRECTO por el socket, en modo síncrono,
